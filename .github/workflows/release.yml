@@ -1,4 +1,4 @@
-name: Release APK
+name: Release SDK and APK
 
 on:
   push:
@@ -15,34 +15,42 @@ jobs:
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Install Android SDK packages
-        shell: bash
-        run: |
-          SDKMANAGER="$(find /usr/local/lib/android/sdk/cmdline-tools -type f -name sdkmanager | sort -V | tail -1)"
-          echo "Using $SDKMANAGER"
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
-
-      - name: Build and test
-        run: |
-          ./gradlew :openmrz-core:test
-          ./gradlew :sample:assembleDebug
-
-      - name: Prepare release asset
+      - name: Resolve release coordinates
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#release/}"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "GROUP=com.github.Mehrdad32.OpenMRZ-Android" >> "$GITHUB_ENV"
+
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          SDKMANAGER="$(find /usr/local/lib/android/sdk/cmdline-tools -type f -name sdkmanager | sort -V | tail -1)"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Test, build SDK and verify Maven publication
+        run: |
+          ./gradlew :openmrz-core:test :openmrz-ocr:test
+          ./gradlew :openmrz-ocr:assembleRelease :openmrz-android:assembleRelease :sample:assembleDebug
+          ./gradlew publishToMavenLocal
+
+      - name: Prepare release assets
+        shell: bash
+        run: |
           cp sample/build/outputs/apk/debug/sample-debug.apk "OpenMRZ-Android-$VERSION.apk"
+          cp openmrz-android/build/outputs/aar/openmrz-android-release.aar "openmrz-android-$VERSION.aar"
+          cp openmrz-ocr/build/outputs/aar/openmrz-ocr-release.aar "openmrz-ocr-$VERSION.aar"
+          sha256sum             "OpenMRZ-Android-$VERSION.apk"             "openmrz-android-$VERSION.aar"             "openmrz-ocr-$VERSION.aar"             > SHA256SUMS.txt
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
@@ -53,15 +61,26 @@ jobs:
           prerelease: true
           generate_release_notes: true
           body: |
-            First testable OpenMRZ Android alpha.
+            SDK-first OpenMRZ Android alpha.
 
-            Features:
-            - Offline CameraX scanner
-            - Gallery image testing
-            - Tesseract 5 OCR through Tesseract4Android
-            - TD1 / TD2 / TD3 parser
-            - ICAO check-digit validation
-            - No API key or runtime Internet permission
+            Release assets:
+            - openmrz-android AAR: CameraX scanner SDK
+            - openmrz-ocr AAR: still-image/offline OCR SDK
+            - sample APK: manual device testing
+            - SHA256SUMS.txt
 
-            The APK is a debug/test build intended for device evaluation.
-          files: OpenMRZ-Android-${{ env.VERSION }}.apk
+            Accuracy pass:
+            - MRZ region detection instead of fixed Gallery crop
+            - contrast + binary OCR attempts
+            - line-oriented OCR attempts
+            - context-aware O/0, I/1, Z/2, S/5, G/6 and B/8 correction
+            - stricter TD1/TD2/TD3 field validation
+            - VERIFIED is separated from checksum-valid/low-confidence reads
+            - tessdata_best replaces tessdata_fast
+
+            Runtime recognition remains offline and does not require an API key.
+          files: |
+            OpenMRZ-Android-${{ env.VERSION }}.apk
+            openmrz-android-${{ env.VERSION }}.aar
+            openmrz-ocr-${{ env.VERSION }}.aar
+            SHA256SUMS.txt

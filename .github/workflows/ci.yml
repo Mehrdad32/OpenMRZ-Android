@@ -15,10 +15,12 @@ jobs:
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      GROUP: io.github.mehrdad32.openmrz
+      VERSION: 0.1.0-ci
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -33,13 +35,21 @@ jobs:
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Test core
-        run: ./gradlew :openmrz-core:test --stacktrace
+      - name: Test parsers and OCR post-processing
+        run: |
+          ./gradlew :openmrz-core:test :openmrz-ocr:test --stacktrace
 
-      - name: Build sample APK
-        run: ./gradlew :sample:assembleDebug --stacktrace
+      - name: Build SDK AARs and sample APK
+        run: |
+          ./gradlew :openmrz-ocr:assembleRelease :openmrz-android:assembleRelease :sample:assembleDebug --stacktrace
+
+      - name: Verify Maven publication
+        run: ./gradlew publishToMavenLocal --stacktrace
 
       - uses: actions/upload-artifact@v4
         with:
-          name: OpenMRZ-Android-debug
-          path: sample/build/outputs/apk/debug/sample-debug.apk
+          name: OpenMRZ-Android-CI
+          path: |
+            sample/build/outputs/apk/debug/sample-debug.apk
+            openmrz-ocr/build/outputs/aar/openmrz-ocr-release.aar
+            openmrz-android/build/outputs/aar/openmrz-android-release.aar
