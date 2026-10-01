@@ -10,8 +10,8 @@ android {
         applicationId = "io.github.mehrdad32.openmrz.sample"
         minSdk = 23
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0-alpha.1"
+        versionCode = 2
+        versionName = (System.getenv("VERSION") ?: "v0.1.0-alpha.2-dev").removePrefix("v")
     }
 
     compileOptions {
@@ -27,11 +27,7 @@ android {
 }
 
 dependencies {
-    implementation(project(":openmrz-ocr"))
+    implementation(project(":openmrz-android"))
     implementation(libs.activity)
     implementation(libs.androidx.core)
-    implementation(libs.camera.core)
-    implementation(libs.camera.camera2)
-    implementation(libs.camera.lifecycle)
-    implementation(libs.camera.view)
 }
