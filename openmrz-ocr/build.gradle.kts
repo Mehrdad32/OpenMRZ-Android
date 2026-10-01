@@ -8,7 +8,7 @@ version = "0.1.0-SNAPSHOT"
 
 android {
     namespace = "io.github.mehrdad32.openmrz.ocr"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 21
