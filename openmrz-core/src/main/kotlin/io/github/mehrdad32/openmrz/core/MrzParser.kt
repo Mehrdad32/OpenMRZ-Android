@@ -213,19 +213,34 @@ object MrzParser {
 
         return MrzFieldValidation(
             documentCode = codeValid,
-            issuingState = isCountryLike(issuingState),
-            nationality = isCountryLike(nationality),
-            birthDateFormat = birthDate.length == 6 && birthDate.all(Char::isDigit),
-            expiryDateFormat = expiryDate.length == 6 && expiryDate.all(Char::isDigit),
+            issuingState = isThreeLetterCode(issuingState),
+            nationality = isThreeLetterCode(nationality),
+            birthDateFormat = isValidMrzDate(birthDate),
+            expiryDateFormat = isValidMrzDate(expiryDate),
             sex = sex == 'M' || sex == 'F' || sex == 'X' || sex == '<',
             names = nameField.any(Char::isLetter) && nameField.all { it.isLetter() || it == '<' },
         )
     }
 
-    private fun isCountryLike(value: String): Boolean =
-        value.length == 3 &&
-            value.all { it.isLetter() || it == '<' } &&
-            value.count(Char::isLetter) >= 2
+    private fun isThreeLetterCode(value: String): Boolean =
+        value.length == 3 && value.all { it in 'A'..'Z' }
+
+    private fun isValidMrzDate(value: String): Boolean {
+        if (value.length != 6 || !value.all(Char::isDigit)) return false
+
+        val month = value.substring(2, 4).toInt()
+        val day = value.substring(4, 6).toInt()
+
+        if (month !in 1..12) return false
+
+        val maxDay = when (month) {
+            2 -> 29
+            4, 6, 9, 11 -> 30
+            else -> 31
+        }
+
+        return day in 1..maxDay
+    }
 
     private fun parseName(field: String): Pair<String, List<String>> {
         val sections = field.trim('<').split("<<", limit = 2)

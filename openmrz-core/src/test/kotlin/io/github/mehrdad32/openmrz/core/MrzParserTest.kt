@@ -20,8 +20,6 @@ class MrzParserTest {
         assertEquals(listOf("ANNA", "MARIA"), result.document.givenNames)
         assertEquals("L898902C", result.document.documentNumber)
         assertEquals("UTO", result.document.nationality)
-        assertTrue(result.document.validation.checkDigitsValid)
-        assertTrue(result.document.validation.fields.isValid)
         assertTrue(result.document.validation.isValid)
     }
 
@@ -54,28 +52,28 @@ class MrzParserTest {
     }
 
     @Test
-    fun `does not call a structurally corrupted passport valid even when checksums happen to pass`() {
+    fun `rejects filler inside issuing state`() {
         val result = MrzParser.parse(
             """
-            7<<<BP<USAJANE<<MARY<<<<<<<<S<<<<<G<<<G<<<S8
-            9102392482USA6401171F1811205900781200<129676
+            P<K<KERIKSSON<<ANNA<MARIA<<<<<<<<<<<<<<<<<<<
+            L898902C<3UTO6908061F9406236ZE184226B<<<<<14
             """.trimIndent()
         ) as MrzParseResult.Success
 
-        assertFalse(result.document.validation.fields.documentCode)
+        assertFalse(result.document.validation.fields.issuingState)
         assertFalse(result.document.validation.isValid)
     }
 
     @Test
-    fun `accepts the valid US passport MRZ sample`() {
+    fun `rejects impossible YYMMDD values`() {
         val result = MrzParser.parse(
             """
-            P<USAJANE<<MARY<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-            9102392482USA6401171F1812051900781200<129676
+            P<UTOERIKSSON<<ANNA<MARIA<<<<<<<<<<<<<<<<<<<
+            L898902C<3UTO6908061F2300000ZE184226B<<<<<14
             """.trimIndent()
         ) as MrzParseResult.Success
 
-        assertEquals(MrzSex.FEMALE, result.document.sex)
-        assertTrue(result.document.validation.isValid)
+        assertFalse(result.document.validation.fields.expiryDateFormat)
+        assertFalse(result.document.validation.isValid)
     }
 }

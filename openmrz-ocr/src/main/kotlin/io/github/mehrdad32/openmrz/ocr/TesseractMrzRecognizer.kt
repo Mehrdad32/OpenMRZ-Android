@@ -6,6 +6,7 @@ import com.googlecode.tesseract.android.TessBaseAPI
 import io.github.mehrdad32.openmrz.core.MrzParseResult
 import java.io.Closeable
 import java.io.File
+import kotlin.math.roundToInt
 
 class TesseractMrzRecognizer(
     context: Context,
@@ -17,6 +18,11 @@ class TesseractMrzRecognizer(
         val post: MrzPostProcessResult,
     )
 
+    private data class RegionCandidate(
+        val bitmap: Bitmap,
+        val detected: Boolean,
+    )
+
     private val appContext = context.applicationContext
     private val tess = TessBaseAPI()
     private var closed = false
@@ -24,7 +30,7 @@ class TesseractMrzRecognizer(
     init {
         val dataRoot = ensureLanguageData()
         check(tess.init(dataRoot.absolutePath, LANGUAGE, TessBaseAPI.OEM_LSTM_ONLY)) {
-            "Failed to initialize Tesseract with bundled OCR language data."
+            "Failed to initialize Tesseract with bundled MRZ language data."
         }
 
         tess.setVariable(
@@ -36,56 +42,16 @@ class TesseractMrzRecognizer(
     }
 
     @Synchronized
-    fun recognize(bitmap: Bitmap): MrzOcrResult {
-        check(!closed) { "Recognizer is already closed." }
+    fun recognize(bitmap: Bitmap): MrzOcrResult =
+        recognizeInternal(bitmap, autoDetectRegion = config.autoDetectRegion)
 
-        val region = if (config.autoDetectRegion) {
-            MrzRegionDetector.detect(bitmap)
-        } else {
-            DetectedMrzRegion(
-                bitmap.copy(Bitmap.Config.ARGB_8888, false),
-                false,
-            )
-        }
-
-        val attempts = mutableListOf<OcrAttempt>()
-        val prepared = mutableListOf<Bitmap>()
-
-        try {
-            val contrast = MrzImagePreprocessor.prepareContrast(region.bitmap)
-            prepared += contrast
-            collectAttempts(contrast, attempts)
-
-            if (config.mode == MrzRecognitionMode.ACCURATE) {
-                val binary = MrzImagePreprocessor.prepareBinary(region.bitmap)
-                prepared += binary
-                collectAttempts(binary, attempts)
-            }
-
-            val best = attempts.maxByOrNull(::attemptScore)
-                ?: OcrAttempt(
-                    rawText = "",
-                    confidence = 0,
-                    post = MrzOcrPostProcessor.parse(""),
-                )
-
-            val status = statusFor(best)
-
-            return MrzOcrResult(
-                rawText = best.rawText,
-                normalizedText = best.post.text,
-                confidence = best.confidence,
-                parseResult = best.post.parseResult,
-                status = status,
-                correctionCount = best.post.correctionCount,
-                regionDetected = region.detected,
-                attemptCount = attempts.size,
-            )
-        } finally {
-            prepared.forEach { if (!it.isRecycled) it.recycle() }
-            if (!region.bitmap.isRecycled) region.bitmap.recycle()
-        }
-    }
+    /**
+     * Recognize a bitmap that has already been cropped to the MRZ guide/ROI.
+     * Camera integrations should use this to avoid a second automatic crop.
+     */
+    @Synchronized
+    fun recognizeCropped(bitmap: Bitmap): MrzOcrResult =
+        recognizeInternal(bitmap, autoDetectRegion = false)
 
     override fun close() {
         if (!closed) {
@@ -94,33 +60,199 @@ class TesseractMrzRecognizer(
         }
     }
 
-    private fun collectAttempts(
+    private fun recognizeInternal(
+        bitmap: Bitmap,
+        autoDetectRegion: Boolean,
+    ): MrzOcrResult {
+        check(!closed) { "Recognizer is already closed." }
+
+        val regions = buildRegionCandidates(bitmap, autoDetectRegion)
+        val attempts = mutableListOf<OcrAttempt>()
+
+        try {
+            // First pass deliberately favors whole-region OCR. This was more stable
+            // than line splitting on real passport photos and avoids alpha.2 regressions.
+            for (region in regions) {
+                runPreparedAttempts(
+                    region.bitmap,
+                    attempts,
+                    includeLineFallback = false,
+                )
+            }
+
+            var best = attempts.maxByOrNull(::attemptScore)
+
+            // Line OCR is now a fallback only, not a peer candidate that can override
+            // a better block read merely because Tesseract reported a higher confidence.
+            if (config.mode == MrzRecognitionMode.ACCURATE && !isUseful(best)) {
+                for (region in regions) {
+                    runPreparedAttempts(
+                        region.bitmap,
+                        attempts,
+                        includeLineFallback = true,
+                        blockAlreadyTried = true,
+                    )
+                }
+                best = attempts.maxByOrNull(::attemptScore)
+            }
+
+            val finalAttempt = best ?: OcrAttempt(
+                rawText = "",
+                confidence = 0,
+                post = MrzOcrPostProcessor.parse(""),
+            )
+
+            return MrzOcrResult(
+                rawText = finalAttempt.rawText,
+                normalizedText = finalAttempt.post.text,
+                confidence = finalAttempt.confidence,
+                parseResult = finalAttempt.post.parseResult,
+                status = statusFor(finalAttempt),
+                correctionCount = finalAttempt.post.correctionCount,
+                regionDetected = regions.any { it.detected },
+                attemptCount = attempts.size,
+            )
+        } finally {
+            regions.forEach { region ->
+                if (!region.bitmap.isRecycled) region.bitmap.recycle()
+            }
+        }
+    }
+
+    private fun buildRegionCandidates(
+        source: Bitmap,
+        autoDetectRegion: Boolean,
+    ): List<RegionCandidate> {
+        if (!autoDetectRegion) {
+            return listOf(
+                RegionCandidate(
+                    bitmap = source.copy(Bitmap.Config.ARGB_8888, false),
+                    detected = false,
+                )
+            )
+        }
+
+        val candidates = mutableListOf<RegionCandidate>()
+
+        val detected = MrzRegionDetector.detect(source)
+        candidates += RegionCandidate(
+            bitmap = detected.bitmap,
+            detected = detected.detected,
+        )
+
+        // Keep conservative bottom-of-document fallbacks. The previous release
+        // trusted a single detector result, which could crop the correct MRZ away.
+        candidates += RegionCandidate(
+            bitmap = bottomCrop(source, 0.52f),
+            detected = false,
+        )
+        candidates += RegionCandidate(
+            bitmap = bottomCrop(source, 0.64f),
+            detected = false,
+        )
+
+        return candidates
+    }
+
+    private fun bottomCrop(
+        source: Bitmap,
+        startFraction: Float,
+    ): Bitmap {
+        val top = (source.height * startFraction)
+            .roundToInt()
+            .coerceIn(0, source.height - 1)
+        val left = (source.width * 0.015f)
+            .roundToInt()
+            .coerceIn(0, source.width - 1)
+        val right = (source.width * 0.985f)
+            .roundToInt()
+            .coerceIn(left + 1, source.width)
+
+        return Bitmap.createBitmap(
+            source,
+            left,
+            top,
+            right - left,
+            source.height - top,
+        )
+    }
+
+    private fun runPreparedAttempts(
+        region: Bitmap,
+        output: MutableList<OcrAttempt>,
+        includeLineFallback: Boolean,
+        blockAlreadyTried: Boolean = false,
+    ) {
+        val prepared = mutableListOf<Bitmap>()
+
+        try {
+            val contrast = MrzImagePreprocessor.prepareContrast(region)
+            prepared += contrast
+
+            if (!blockAlreadyTried) {
+                output += runAttempt(
+                    contrast,
+                    TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK,
+                )
+            }
+
+            if (includeLineFallback) {
+                collectLineAttempt(contrast, output)
+            }
+
+            if (config.mode == MrzRecognitionMode.ACCURATE) {
+                val binary = MrzImagePreprocessor.prepareBinary(region)
+                prepared += binary
+
+                if (!blockAlreadyTried) {
+                    output += runAttempt(
+                        binary,
+                        TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK,
+                    )
+                }
+
+                if (includeLineFallback) {
+                    collectLineAttempt(binary, output)
+                }
+            }
+        } finally {
+            prepared.forEach { bitmap ->
+                if (!bitmap.isRecycled) bitmap.recycle()
+            }
+        }
+    }
+
+    private fun collectLineAttempt(
         bitmap: Bitmap,
         output: MutableList<OcrAttempt>,
     ) {
-        output += runAttempt(bitmap, TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK)
-
         val lines = MrzRegionDetector.splitLines(bitmap)
-        if (lines.size in 2..3) {
-            try {
-                val texts = mutableListOf<String>()
-                val confidences = mutableListOf<Int>()
+        if (lines.size !in 2..3) {
+            lines.forEach { if (!it.isRecycled) it.recycle() }
+            return
+        }
 
-                for (line in lines) {
-                    val attempt = runRaw(line, TessBaseAPI.PageSegMode.PSM_SINGLE_LINE)
-                    texts += attempt.first.trim()
-                    confidences += attempt.second
-                }
+        try {
+            val texts = mutableListOf<String>()
+            val confidences = mutableListOf<Int>()
 
-                val combined = texts.joinToString("\n")
-                output += OcrAttempt(
-                    rawText = combined,
-                    confidence = if (confidences.isEmpty()) 0 else confidences.average().toInt(),
-                    post = MrzOcrPostProcessor.parse(combined),
+            for (line in lines) {
+                val attempt = runRaw(
+                    line,
+                    TessBaseAPI.PageSegMode.PSM_SINGLE_LINE,
                 )
-            } finally {
-                lines.forEach { if (!it.isRecycled) it.recycle() }
+                texts += attempt.first.trim()
+                confidences += attempt.second
             }
+
+            val combined = texts.joinToString("\n")
+            output += OcrAttempt(
+                rawText = combined,
+                confidence = confidences.average().toInt(),
+                post = MrzOcrPostProcessor.parse(combined),
+            )
+        } finally {
+            lines.forEach { if (!it.isRecycled) it.recycle() }
         }
     }
 
@@ -147,20 +279,31 @@ class TesseractMrzRecognizer(
         return text to confidence
     }
 
+    private fun isUseful(attempt: OcrAttempt?): Boolean {
+        val parsed = attempt?.post?.parseResult as? MrzParseResult.Success
+            ?: return false
+        val validation = parsed.document.validation
+
+        return validation.isValid ||
+            validation.checkDigitsValid ||
+            validation.fields.isValid
+    }
+
     private fun attemptScore(attempt: OcrAttempt): Int {
         val parsed = attempt.post.parseResult as? MrzParseResult.Success
+            ?: return attempt.confidence - 2_000
 
-        var score = attempt.confidence.coerceIn(0, 100)
-        score -= attempt.post.correctionCount * 2
+        val validation = parsed.document.validation
 
-        if (parsed != null) {
-            val validation = parsed.document.validation
-            if (validation.fields.isValid) score += 40
-            if (validation.checkDigitsValid) score += 80
-            if (validation.isValid) score += 40
-        }
-
-        return score
+        return (if (validation.isValid) 20_000 else 0) +
+            (if (validation.checkDigitsValid) 10_000 else 0) +
+            (if (validation.fields.isValid) 4_000 else 0) +
+            (if (validation.documentNumber) 500 else 0) +
+            (if (validation.birthDate) 500 else 0) +
+            (if (validation.expiryDate) 500 else 0) +
+            (if (validation.composite) 800 else 0) +
+            attempt.confidence -
+            attempt.post.correctionCount * 25
     }
 
     private fun statusFor(attempt: OcrAttempt): MrzScanStatus {
@@ -203,7 +346,7 @@ class TesseractMrzRecognizer(
     }
 
     private companion object {
-        const val LANGUAGE = "eng"
-        const val MIN_MODEL_BYTES = 5_000_000L
+        const val LANGUAGE = "mrz"
+        const val MIN_MODEL_BYTES = 10_000_000L
     }
 }

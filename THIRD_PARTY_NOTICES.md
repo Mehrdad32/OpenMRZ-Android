@@ -5,7 +5,11 @@ OpenMRZ Android is MIT licensed. Dependencies retain their own licenses.
 - **Tesseract OCR** — Apache License 2.0
 - **Tesseract4Android** by Adaptech — Apache License 2.0
 - **Leptonica** — BSD-style license
-- **Tesseract tessdata_best / eng.traineddata** — Apache License 2.0
+- **DoubangoTelecom tesseractMRZ model/dataset repository** — BSD 3-Clause License
 - **AndroidX / CameraX / Activity** — Apache License 2.0
+
+The bundled `mrz.traineddata` is fetched from the BSD-3-Clause licensed
+[DoubangoTelecom/tesseractMRZ](https://github.com/DoubangoTelecom/tesseractMRZ)
+repository during the build.
 
 The project does not redistribute the Xavier SDK/AAR. Xavier can be used as a behavior and compatibility reference while OpenMRZ remains independently implemented.

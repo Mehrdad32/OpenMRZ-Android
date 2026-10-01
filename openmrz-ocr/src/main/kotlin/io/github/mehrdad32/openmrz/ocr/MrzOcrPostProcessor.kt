@@ -1,5 +1,6 @@
 package io.github.mehrdad32.openmrz.ocr
 
+import io.github.mehrdad32.openmrz.core.MrzCheckDigit
 import io.github.mehrdad32.openmrz.core.MrzFormat
 import io.github.mehrdad32.openmrz.core.MrzParseResult
 import io.github.mehrdad32.openmrz.core.MrzParser
@@ -75,14 +76,12 @@ internal object MrzOcrPostProcessor {
                             corrections = corrections,
                             score = score(parsed.document.validation, corrections),
                         )
+
                         if (best == null || candidate.score > best.score) {
                             best = candidate
                         }
 
-                        if (
-                            parsed.document.validation.isValid &&
-                            corrections == 0
-                        ) {
+                        if (parsed.document.validation.isValid && corrections == 0) {
                             return MrzPostProcessResult(text, parsed, corrections)
                         }
                     }
@@ -126,11 +125,13 @@ internal object MrzOcrPostProcessor {
         for (line in aligned) {
             when {
                 line.length == layout.length -> resized += line
+
                 line.length < layout.length -> {
                     if (layout.length - line.length <= 10) {
                         resized += line.padEnd(layout.length, '<')
                     }
                 }
+
                 else -> {
                     val overflow = line.length - layout.length
                     if (overflow <= 14) {
@@ -162,7 +163,95 @@ internal object MrzOcrPostProcessor {
             out[index] = corrected
         }
 
+        corrections += repairDocumentNumberByChecksum(format, lineIndex, out)
+
         return NormalizedLine(String(out), corrections)
+    }
+
+    private fun repairDocumentNumberByChecksum(
+        format: MrzFormat,
+        lineIndex: Int,
+        chars: CharArray,
+    ): Int {
+        val spec = when {
+            format == MrzFormat.TD3 && lineIndex == 1 -> Pair(0..8, 9)
+            format == MrzFormat.TD2 && lineIndex == 1 -> Pair(0..8, 9)
+            format == MrzFormat.TD1 && lineIndex == 0 -> Pair(5..13, 14)
+            else -> return 0
+        }
+
+        val range = spec.first
+        val checkIndex = spec.second
+
+        if (checkIndex !in chars.indices) return 0
+        val expected = chars[checkIndex]
+        if (expected !in '0'..'9') return 0
+
+        fun currentValue(): String =
+            buildString { for (index in range) append(chars[index]) }
+
+        if (MrzCheckDigit.isValid(currentValue(), expected)) return 0
+
+        val original = chars.copyOf()
+
+        // Most MRZ OCR mistakes are a single ambiguous glyph. Try the smallest
+        // possible repair first so checksum correction never becomes a free-form guess.
+        for (index in range) {
+            val source = original[index]
+            for (alternative in alternatives(source)) {
+                if (alternative == source) continue
+                chars[index] = alternative
+
+                if (MrzCheckDigit.isValid(currentValue(), expected)) {
+                    return 1
+                }
+            }
+            chars[index] = source
+        }
+
+        // Two-character repair is still bounded: a TD1/TD2/TD3 document number
+        // contains only nine characters.
+        for (first in range) {
+            val firstSource = original[first]
+            for (firstAlternative in alternatives(firstSource)) {
+                if (firstAlternative == firstSource) continue
+                chars[first] = firstAlternative
+
+                for (second in (first + 1)..range.last) {
+                    val secondSource = original[second]
+                    for (secondAlternative in alternatives(secondSource)) {
+                        if (secondAlternative == secondSource) continue
+                        chars[second] = secondAlternative
+
+                        if (MrzCheckDigit.isValid(currentValue(), expected)) {
+                            return 2
+                        }
+                    }
+                    chars[second] = secondSource
+                }
+
+                chars[first] = firstSource
+            }
+        }
+
+        original.copyInto(chars)
+        return 0
+    }
+
+    private fun alternatives(char: Char): CharArray = when (char) {
+        '0' -> charArrayOf('0', 'O', 'Q', 'D')
+        'O', 'Q', 'D' -> charArrayOf(char, '0')
+        '1' -> charArrayOf('1', 'I', 'L')
+        'I', 'L' -> charArrayOf(char, '1')
+        '2' -> charArrayOf('2', 'Z')
+        'Z' -> charArrayOf('Z', '2')
+        '5' -> charArrayOf('5', 'S')
+        'S' -> charArrayOf('S', '5')
+        '6' -> charArrayOf('6', 'G')
+        'G' -> charArrayOf('G', '6')
+        '8' -> charArrayOf('8', 'B')
+        'B' -> charArrayOf('B', '8')
+        else -> charArrayOf(char)
     }
 
     private fun expectedAt(
@@ -246,10 +335,7 @@ internal object MrzOcrPostProcessor {
         Expected.CHECK -> if (char == '<') '<' else toDigit(char)
         Expected.NAME -> if (char == '<') '<' else toAlpha(char)
         Expected.ALNUM -> char
-        Expected.SEX -> when (char) {
-            'M', 'F', 'X', '<' -> char
-            else -> char
-        }
+        Expected.SEX -> char
         Expected.ANY -> char
     }
 
@@ -299,17 +385,16 @@ internal object MrzOcrPostProcessor {
         validation: MrzValidation,
         corrections: Int,
     ): Int =
-        (if (validation.documentNumber) 4 else 0) +
-            (if (validation.birthDate) 4 else 0) +
-            (if (validation.expiryDate) 4 else 0) +
-            (if (validation.optionalData != false) 2 else 0) +
-            (if (validation.composite) 8 else 0) +
-            (if (validation.fields.documentCode) 5 else 0) +
-            (if (validation.fields.issuingState) 3 else 0) +
-            (if (validation.fields.nationality) 3 else 0) +
-            (if (validation.fields.birthDateFormat) 2 else 0) +
-            (if (validation.fields.expiryDateFormat) 2 else 0) +
-            (if (validation.fields.sex) 1 else 0) +
-            (if (validation.fields.names) 2 else 0) -
-            corrections.coerceAtMost(10)
+        (if (validation.isValid) 10_000 else 0) +
+            (if (validation.checkDigitsValid) 5_000 else 0) +
+            (if (validation.fields.isValid) 2_000 else 0) +
+            (if (validation.documentNumber) 300 else 0) +
+            (if (validation.birthDate) 300 else 0) +
+            (if (validation.expiryDate) 300 else 0) +
+            (if (validation.optionalData != false) 100 else 0) +
+            (if (validation.composite) 500 else 0) +
+            (if (validation.fields.documentCode) 150 else 0) +
+            (if (validation.fields.issuingState) 100 else 0) +
+            (if (validation.fields.nationality) 100 else 0) -
+            corrections * 20
 }
