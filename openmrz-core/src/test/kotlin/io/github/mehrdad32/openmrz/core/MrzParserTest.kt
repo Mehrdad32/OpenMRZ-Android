@@ -10,7 +10,7 @@ class MrzParserTest {
         val result = MrzParser.parse(
             """
             P<UTOERIKSSON<<ANNA<MARIA<<<<<<<<<<<<<<<<<<<
-            L898902C<3UTO6908061F9406236ZE184226B<<<<<10
+            L898902C<3UTO6908061F9406236ZE184226B<<<<<14
             """.trimIndent()
         ) as MrzParseResult.Success
 
@@ -18,6 +18,7 @@ class MrzParserTest {
         assertEquals("ERIKSSON", result.document.surname)
         assertEquals(listOf("ANNA", "MARIA"), result.document.givenNames)
         assertEquals("L898902C", result.document.documentNumber)
+        assertEquals("UTO", result.document.nationality)
         assertTrue(result.document.validation.isValid)
     }
 

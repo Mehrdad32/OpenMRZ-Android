@@ -17,3 +17,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "OpenMRZ-Android"
 include(":openmrz-core")
+include(":openmrz-ocr")
+include(":sample")
