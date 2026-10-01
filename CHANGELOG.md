@@ -1,28 +1,32 @@
 # Changelog
 
+## v0.2.0-beta.1
+
+- Promoted OpenMRZ to the first public beta.
+- Finalized the public package/namespace prefix as `ir.mehrdad32.openmrz.*`.
+- Changed the default OCR strategy to progressive `BALANCED` mode.
+- Added early exit: a verified first OCR attempt returns immediately.
+- Fallback crops are created lazily only when the primary MRZ region fails.
+- Binary preprocessing is no longer run unconditionally in the common path.
+- Line-by-line OCR remains an `ACCURATE`-mode fallback only.
+- Added `processingTimeMs` while retaining `attemptCount` for real-device profiling.
+- The sample APK now displays processing latency and OCR attempt count.
+- Retained the dedicated MRZ-trained model and alpha.3 accuracy fixes.
+
 ## v0.1.0-alpha.3
 
 - Fixed the OCR regression introduced in alpha.2.
-- Replaced the generic English Tesseract model with a dedicated MRZ-trained model from the BSD-3-Clause licensed DoubangoTelecom/tesseractMRZ project.
-- Whole-region OCR is primary again; line-by-line OCR is now fallback-only.
-- Added multiple conservative bottom-region candidates so automatic detection cannot be the only crop.
-- Fixed double region detection in the CameraX scanner.
-- Added checksum-guided document-number repair for ambiguous OCR glyphs such as Z/2.
-- Tightened issuing-state and nationality validation to three alphabetic characters.
-- Added semantic YYMMDD validation; impossible dates such as 230000 are no longer structurally valid.
-- Strengthened candidate scoring so validation beats raw OCR confidence.
+- Replaced the generic English Tesseract model with a dedicated MRZ-trained model.
+- Whole-region OCR became primary again; line OCR became fallback-only.
+- Fixed CameraX double region detection.
+- Added checksum-guided document-number repair and stricter structural validation.
 
 ## v0.1.0-alpha.2
 
-- Refactored the project around reusable SDK modules instead of the sample application.
+- Refactored the repository around reusable SDK modules.
 - Added the `openmrz-android` CameraX scanner AAR.
-- Added automatic MRZ region detection.
-- Added multiple OCR preprocessing attempts and explicit scan trust states.
 - Added Maven/JitPack publication verification.
 
 ## v0.1.0-alpha.1
 
-- Initial TD1/TD2/TD3 parser.
-- ICAO check-digit validation.
-- Tesseract OCR prototype.
-- CameraX sample application.
+- Initial TD1/TD2/TD3 parser, OCR prototype and CameraX sample.

@@ -3,15 +3,15 @@ plugins {
 }
 
 android {
-    namespace = "io.github.mehrdad32.openmrz.sample"
+    namespace = "ir.mehrdad32.openmrz.sample"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "io.github.mehrdad32.openmrz.sample"
+        applicationId = "ir.mehrdad32.openmrz.sample"
         minSdk = 23
         targetSdk = 36
-        versionCode = 2
-        versionName = (System.getenv("VERSION") ?: "v0.1.0-alpha.2-dev").removePrefix("v")
+        versionCode = 3
+        versionName = (System.getenv("VERSION") ?: "v0.2.0-beta.1-dev").removePrefix("v")
     }
 
     compileOptions {

@@ -14,6 +14,7 @@ jobs:
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      GROUP: ir.mehrdad32.openmrz
     steps:
       - uses: actions/checkout@v5
 
@@ -24,12 +25,11 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Resolve release coordinates
+      - name: Resolve release version
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#release/}"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          echo "GROUP=com.github.Mehrdad32.OpenMRZ-Android" >> "$GITHUB_ENV"
 
       - name: Install Android SDK packages
         shell: bash
@@ -61,24 +61,16 @@ jobs:
           prerelease: true
           generate_release_notes: true
           body: |
-            OCR regression-fix release.
+            First OpenMRZ beta.
 
-            Release assets:
-            - openmrz-android AAR
-            - openmrz-ocr AAR
-            - sample APK
-            - SHA256SUMS.txt
+            - Final public package namespace: ir.mehrdad32.openmrz.*
+            - Progressive BALANCED OCR is now the default
+            - Verified first-pass reads return immediately
+            - Fallback crops/preprocessing run only when needed
+            - processingTimeMs and attemptCount are exposed for profiling
+            - Dedicated MRZ-trained model and alpha.3 accuracy fixes are retained
 
-            Accuracy changes:
-            - dedicated MRZ-trained Tesseract model
-            - whole-block OCR restored as primary path
-            - line OCR only as fallback
-            - automatic detector plus conservative bottom-region candidates
-            - CameraX double-crop fixed
-            - checksum-guided document-number repair
-            - stricter country-code and date validation
-
-            Runtime recognition remains fully offline.
+            Assets include both SDK AARs, the sample APK, and SHA-256 checksums.
           files: |
             OpenMRZ-Android-${{ env.VERSION }}.apk
             openmrz-android-${{ env.VERSION }}.aar

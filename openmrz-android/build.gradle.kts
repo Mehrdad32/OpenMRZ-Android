@@ -3,11 +3,11 @@ plugins {
     id("maven-publish")
 }
 
-group = System.getenv("GROUP") ?: "io.github.mehrdad32.openmrz"
+group = System.getenv("GROUP") ?: "ir.mehrdad32.openmrz"
 version = System.getenv("VERSION") ?: "0.1.0-SNAPSHOT"
 
 android {
-    namespace = "io.github.mehrdad32.openmrz.android"
+    namespace = "ir.mehrdad32.openmrz.android"
     compileSdk = 36
 
     defaultConfig {
