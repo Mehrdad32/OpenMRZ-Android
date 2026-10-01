@@ -1,0 +1,12 @@
+[versions]
+cameraX = "1.6.2"
+tesseract4Android = "4.9.0"
+junit = "5.14.0"
+
+[libraries]
+camera-core = { module = "androidx.camera:camera-core", version.ref = "cameraX" }
+camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "cameraX" }
+camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "cameraX" }
+camera-view = { module = "androidx.camera:camera-view", version.ref = "cameraX" }
+tesseract4android = { module = "cz.adaptech.tesseract4android:tesseract4android", version.ref = "tesseract4Android" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
