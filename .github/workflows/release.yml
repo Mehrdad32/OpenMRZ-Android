@@ -1,0 +1,67 @@
+name: Release APK
+
+on:
+  push:
+    branches:
+      - "release/**"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          SDKMANAGER="$(find /usr/local/lib/android/sdk/cmdline-tools -type f -name sdkmanager | sort -V | tail -1)"
+          echo "Using $SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Build and test
+        run: |
+          ./gradlew :openmrz-core:test
+          ./gradlew :sample:assembleDebug
+
+      - name: Prepare release asset
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#release/}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          cp sample/build/outputs/apk/debug/sample-debug.apk "OpenMRZ-Android-$VERSION.apk"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.VERSION }}
+          name: OpenMRZ Android ${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          generate_release_notes: true
+          body: |
+            First testable OpenMRZ Android alpha.
+
+            Features:
+            - Offline CameraX scanner
+            - Gallery image testing
+            - Tesseract 5 OCR through Tesseract4Android
+            - TD1 / TD2 / TD3 parser
+            - ICAO check-digit validation
+            - No API key or runtime Internet permission
+
+            The APK is a debug/test build intended for device evaluation.
+          files: OpenMRZ-Android-${{ env.VERSION }}.apk
