@@ -186,7 +186,9 @@ class OpenMrzScanner(
             val roi = config.regionOfInterest.crop(rotated)
             rotated.recycle()
 
-            val result = ensureRecognizer().recognize(roi)
+            // The CameraX ROI is already an MRZ-oriented crop. Do not run the
+            // still-image region detector a second time.
+            val result = ensureRecognizer().recognizeCropped(roi)
             roi.recycle()
 
             if (

@@ -61,24 +61,24 @@ jobs:
           prerelease: true
           generate_release_notes: true
           body: |
-            SDK-first OpenMRZ Android alpha.
+            OCR regression-fix release.
 
             Release assets:
-            - openmrz-android AAR: CameraX scanner SDK
-            - openmrz-ocr AAR: still-image/offline OCR SDK
-            - sample APK: manual device testing
+            - openmrz-android AAR
+            - openmrz-ocr AAR
+            - sample APK
             - SHA256SUMS.txt
 
-            Accuracy pass:
-            - MRZ region detection instead of fixed Gallery crop
-            - contrast + binary OCR attempts
-            - line-oriented OCR attempts
-            - context-aware O/0, I/1, Z/2, S/5, G/6 and B/8 correction
-            - stricter TD1/TD2/TD3 field validation
-            - VERIFIED is separated from checksum-valid/low-confidence reads
-            - tessdata_best replaces tessdata_fast
+            Accuracy changes:
+            - dedicated MRZ-trained Tesseract model
+            - whole-block OCR restored as primary path
+            - line OCR only as fallback
+            - automatic detector plus conservative bottom-region candidates
+            - CameraX double-crop fixed
+            - checksum-guided document-number repair
+            - stricter country-code and date validation
 
-            Runtime recognition remains offline and does not require an API key.
+            Runtime recognition remains fully offline.
           files: |
             OpenMRZ-Android-${{ env.VERSION }}.apk
             openmrz-android-${{ env.VERSION }}.aar

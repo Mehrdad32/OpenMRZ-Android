@@ -34,16 +34,16 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
 }
 
-val tessdataFile = layout.projectDirectory.file("src/main/assets/tessdata/eng.traineddata")
+val tessdataFile = layout.projectDirectory.file("src/main/assets/tessdata/mrz.traineddata")
 
 tasks.register("prepareTessdata") {
     outputs.file(tessdataFile)
     doLast {
         val output = tessdataFile.asFile
-        if (!output.exists() || output.length() < 5_000_000L) {
+        if (!output.exists() || output.length() < 10_000_000L) {
             output.parentFile.mkdirs()
             val url = uri(
-                "https://raw.githubusercontent.com/tesseract-ocr/tessdata_best/main/eng.traineddata"
+                "https://raw.githubusercontent.com/DoubangoTelecom/tesseractMRZ/master/tessdata_best/mrz.traineddata"
             ).toURL()
             url.openStream().use { input ->
                 output.outputStream().use { outputStream ->
@@ -67,7 +67,7 @@ afterEvaluate {
 
                 pom {
                     name.set("OpenMRZ OCR")
-                    description.set("Offline Tesseract-based MRZ OCR for Android.")
+                    description.set("Offline MRZ-trained Tesseract OCR for Android.")
                     url.set("https://github.com/Mehrdad32/OpenMRZ-Android")
                     licenses {
                         license {
