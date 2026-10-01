@@ -20,18 +20,16 @@ jobs:
           java-version: "17"
 
       - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "9.6.0"
 
-      - uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK
-        run: sdkmanager "platforms;android-37" "build-tools;36.0.0"
+      - name: Install Android SDK packages
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-37" "build-tools;36.0.0"
 
       - name: Build and test
         run: |
-          gradle :openmrz-core:test
-          gradle :sample:assembleDebug
+          ./gradlew :openmrz-core:test
+          ./gradlew :sample:assembleDebug
 
       - name: Prepare release asset
         shell: bash
@@ -48,4 +46,16 @@ jobs:
           target_commitish: ${{ github.sha }}
           prerelease: true
           generate_release_notes: true
+          body: |
+            First testable OpenMRZ Android alpha.
+
+            Features:
+            - Offline CameraX scanner
+            - Gallery image testing
+            - Tesseract 5 OCR through Tesseract4Android
+            - TD1 / TD2 / TD3 parser
+            - ICAO check-digit validation
+            - No API key or runtime Internet permission
+
+            The APK is a debug/test build intended for device evaluation.
           files: OpenMRZ-Android-${{ env.VERSION }}.apk
