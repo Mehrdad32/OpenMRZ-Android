@@ -1,0 +1,5 @@
+jdk:
+  - openjdk17
+
+install:
+  - ./gradlew :openmrz-core:test :openmrz-ocr:test :openmrz-android:assembleRelease publishToMavenLocal -x lint

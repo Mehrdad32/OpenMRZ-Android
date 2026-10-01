@@ -3,11 +3,15 @@ plugins {
     id("maven-publish")
 }
 
-group = "io.github.mehrdad32"
-version = "0.1.0-SNAPSHOT"
+group = System.getenv("GROUP") ?: "io.github.mehrdad32.openmrz"
+version = System.getenv("VERSION") ?: "0.1.0-SNAPSHOT"
 
 kotlin {
     jvmToolchain(17)
+}
+
+java {
+    withSourcesJar()
 }
 
 dependencies {
@@ -25,6 +29,21 @@ publishing {
         create<MavenPublication>("maven") {
             from(components["java"])
             artifactId = "openmrz-core"
+
+            pom {
+                name.set("OpenMRZ Core")
+                description.set("Pure JVM ICAO MRZ parser and check-digit validator.")
+                url.set("https://github.com/Mehrdad32/OpenMRZ-Android")
+                licenses {
+                    license {
+                        name.set("MIT License")
+                        url.set("https://opensource.org/licenses/MIT")
+                    }
+                }
+                scm {
+                    url.set("https://github.com/Mehrdad32/OpenMRZ-Android")
+                }
+            }
         }
     }
 }

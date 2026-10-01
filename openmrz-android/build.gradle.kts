@@ -7,7 +7,7 @@ group = System.getenv("GROUP") ?: "io.github.mehrdad32.openmrz"
 version = System.getenv("VERSION") ?: "0.1.0-SNAPSHOT"
 
 android {
-    namespace = "io.github.mehrdad32.openmrz.ocr"
+    namespace = "io.github.mehrdad32.openmrz.android"
     compileSdk = 36
 
     defaultConfig {
@@ -28,34 +28,13 @@ android {
 }
 
 dependencies {
-    api(project(":openmrz-core"))
-    implementation(libs.tesseract4android)
+    api(project(":openmrz-ocr"))
+    api(libs.camera.view)
+    api(libs.camera.lifecycle)
 
-    testImplementation("junit:junit:4.13.2")
-}
-
-val tessdataFile = layout.projectDirectory.file("src/main/assets/tessdata/eng.traineddata")
-
-tasks.register("prepareTessdata") {
-    outputs.file(tessdataFile)
-    doLast {
-        val output = tessdataFile.asFile
-        if (!output.exists() || output.length() < 5_000_000L) {
-            output.parentFile.mkdirs()
-            val url = uri(
-                "https://raw.githubusercontent.com/tesseract-ocr/tessdata_best/main/eng.traineddata"
-            ).toURL()
-            url.openStream().use { input ->
-                output.outputStream().use { outputStream ->
-                    input.copyTo(outputStream)
-                }
-            }
-        }
-    }
-}
-
-tasks.named("preBuild").configure {
-    dependsOn("prepareTessdata")
+    implementation(libs.camera.core)
+    implementation(libs.camera.camera2)
+    implementation(libs.androidx.core)
 }
 
 afterEvaluate {
@@ -63,11 +42,11 @@ afterEvaluate {
         publications {
             create<MavenPublication>("release") {
                 from(components["release"])
-                artifactId = "openmrz-ocr"
+                artifactId = "openmrz-android"
 
                 pom {
-                    name.set("OpenMRZ OCR")
-                    description.set("Offline Tesseract-based MRZ OCR for Android.")
+                    name.set("OpenMRZ Android")
+                    description.set("CameraX MRZ scanner SDK for Android with offline OCR.")
                     url.set("https://github.com/Mehrdad32/OpenMRZ-Android")
                     licenses {
                         license {

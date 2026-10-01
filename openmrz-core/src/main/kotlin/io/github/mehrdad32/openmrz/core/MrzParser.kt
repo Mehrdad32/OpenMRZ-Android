@@ -41,14 +41,33 @@ object MrzParser {
         val compositeData = l2.substring(0, 10) + l2.substring(13, 20) + l2.substring(21, 43)
 
         return success(
-            MrzFormat.TD3, lines, l1.substring(0, 2), l1.substring(2, 5), l1.substring(5, 44),
-            documentNumber, l2.substring(10, 13), birthDate, l2[20], expiryDate, optionalData,
-            MrzValidation(
-                MrzCheckDigit.isValid(documentNumber, l2[9]),
-                MrzCheckDigit.isValid(birthDate, l2[19]),
-                MrzCheckDigit.isValid(expiryDate, l2[27]),
-                if (l2[42] == '<') null else MrzCheckDigit.isValid(optionalData, l2[42]),
-                MrzCheckDigit.isValid(compositeData, l2[43]),
+            format = MrzFormat.TD3,
+            lines = lines,
+            documentCode = l1.substring(0, 2),
+            issuingState = l1.substring(2, 5),
+            nameField = l1.substring(5, 44),
+            documentNumber = documentNumber,
+            nationality = l2.substring(10, 13),
+            birthDate = birthDate,
+            sex = l2[20],
+            expiryDate = expiryDate,
+            optionalData = optionalData,
+            validation = MrzValidation(
+                documentNumber = MrzCheckDigit.isValid(documentNumber, l2[9]),
+                birthDate = MrzCheckDigit.isValid(birthDate, l2[19]),
+                expiryDate = MrzCheckDigit.isValid(expiryDate, l2[27]),
+                optionalData = if (l2[42] == '<') null else MrzCheckDigit.isValid(optionalData, l2[42]),
+                composite = MrzCheckDigit.isValid(compositeData, l2[43]),
+                fields = validateFields(
+                    format = MrzFormat.TD3,
+                    documentCode = l1.substring(0, 2),
+                    issuingState = l1.substring(2, 5),
+                    nationality = l2.substring(10, 13),
+                    birthDate = birthDate,
+                    expiryDate = expiryDate,
+                    sex = l2[20],
+                    nameField = l1.substring(5, 44),
+                ),
             ),
         )
     }
@@ -63,14 +82,33 @@ object MrzParser {
         val compositeData = l2.substring(0, 10) + l2.substring(13, 20) + l2.substring(21, 35)
 
         return success(
-            MrzFormat.TD2, lines, l1.substring(0, 2), l1.substring(2, 5), l1.substring(5, 36),
-            documentNumber, l2.substring(10, 13), birthDate, l2[20], expiryDate, optionalData,
-            MrzValidation(
-                MrzCheckDigit.isValid(documentNumber, l2[9]),
-                MrzCheckDigit.isValid(birthDate, l2[19]),
-                MrzCheckDigit.isValid(expiryDate, l2[27]),
-                null,
-                MrzCheckDigit.isValid(compositeData, l2[35]),
+            format = MrzFormat.TD2,
+            lines = lines,
+            documentCode = l1.substring(0, 2),
+            issuingState = l1.substring(2, 5),
+            nameField = l1.substring(5, 36),
+            documentNumber = documentNumber,
+            nationality = l2.substring(10, 13),
+            birthDate = birthDate,
+            sex = l2[20],
+            expiryDate = expiryDate,
+            optionalData = optionalData,
+            validation = MrzValidation(
+                documentNumber = MrzCheckDigit.isValid(documentNumber, l2[9]),
+                birthDate = MrzCheckDigit.isValid(birthDate, l2[19]),
+                expiryDate = MrzCheckDigit.isValid(expiryDate, l2[27]),
+                optionalData = null,
+                composite = MrzCheckDigit.isValid(compositeData, l2[35]),
+                fields = validateFields(
+                    format = MrzFormat.TD2,
+                    documentCode = l1.substring(0, 2),
+                    issuingState = l1.substring(2, 5),
+                    nationality = l2.substring(10, 13),
+                    birthDate = birthDate,
+                    expiryDate = expiryDate,
+                    sex = l2[20],
+                    nameField = l1.substring(5, 36),
+                ),
             ),
         )
     }
@@ -87,14 +125,33 @@ object MrzParser {
         val compositeData = l1.substring(5, 30) + l2.substring(0, 7) + l2.substring(8, 15) + optional2
 
         return success(
-            MrzFormat.TD1, lines, l1.substring(0, 2), l1.substring(2, 5), l3,
-            documentNumber, l2.substring(15, 18), birthDate, l2[7], expiryDate, optional1 + optional2,
-            MrzValidation(
-                MrzCheckDigit.isValid(documentNumber, l1[14]),
-                MrzCheckDigit.isValid(birthDate, l2[6]),
-                MrzCheckDigit.isValid(expiryDate, l2[14]),
-                null,
-                MrzCheckDigit.isValid(compositeData, l2[29]),
+            format = MrzFormat.TD1,
+            lines = lines,
+            documentCode = l1.substring(0, 2),
+            issuingState = l1.substring(2, 5),
+            nameField = l3,
+            documentNumber = documentNumber,
+            nationality = l2.substring(15, 18),
+            birthDate = birthDate,
+            sex = l2[7],
+            expiryDate = expiryDate,
+            optionalData = optional1 + optional2,
+            validation = MrzValidation(
+                documentNumber = MrzCheckDigit.isValid(documentNumber, l1[14]),
+                birthDate = MrzCheckDigit.isValid(birthDate, l2[6]),
+                expiryDate = MrzCheckDigit.isValid(expiryDate, l2[14]),
+                optionalData = null,
+                composite = MrzCheckDigit.isValid(compositeData, l2[29]),
+                fields = validateFields(
+                    format = MrzFormat.TD1,
+                    documentCode = l1.substring(0, 2),
+                    issuingState = l1.substring(2, 5),
+                    nationality = l2.substring(15, 18),
+                    birthDate = birthDate,
+                    expiryDate = expiryDate,
+                    sex = l2[7],
+                    nameField = l3,
+                ),
             ),
         )
     }
@@ -116,35 +173,73 @@ object MrzParser {
         val (surname, givenNames) = parseName(nameField)
         return MrzParseResult.Success(
             MrzDocument(
-                format,
-                clean(documentCode),
-                clean(issuingState),
-                clean(documentNumber),
-                clean(nationality),
-                birthDate,
-                when (sex) {
+                format = format,
+                documentCode = clean(documentCode),
+                issuingState = clean(issuingState),
+                documentNumber = clean(documentNumber),
+                nationality = clean(nationality),
+                birthDate = birthDate,
+                sex = when (sex) {
                     'M' -> MrzSex.MALE
                     'F' -> MrzSex.FEMALE
                     else -> MrzSex.UNSPECIFIED
                 },
-                expiryDate,
-                surname,
-                givenNames,
-                clean(optionalData),
-                lines,
-                validation,
+                expiryDate = expiryDate,
+                surname = surname,
+                givenNames = givenNames,
+                optionalData = clean(optionalData),
+                rawLines = lines,
+                validation = validation,
             ),
         )
     }
 
+    private fun validateFields(
+        format: MrzFormat,
+        documentCode: String,
+        issuingState: String,
+        nationality: String,
+        birthDate: String,
+        expiryDate: String,
+        sex: Char,
+        nameField: String,
+    ): MrzFieldValidation {
+        val codeValid = when (format) {
+            MrzFormat.TD3 -> documentCode.firstOrNull() == 'P'
+            MrzFormat.TD1,
+            MrzFormat.TD2,
+            -> documentCode.firstOrNull()?.isLetter() == true
+        } && documentCode.all { it.isLetter() || it == '<' }
+
+        return MrzFieldValidation(
+            documentCode = codeValid,
+            issuingState = isCountryLike(issuingState),
+            nationality = isCountryLike(nationality),
+            birthDateFormat = birthDate.length == 6 && birthDate.all(Char::isDigit),
+            expiryDateFormat = expiryDate.length == 6 && expiryDate.all(Char::isDigit),
+            sex = sex == 'M' || sex == 'F' || sex == 'X' || sex == '<',
+            names = nameField.any(Char::isLetter) && nameField.all { it.isLetter() || it == '<' },
+        )
+    }
+
+    private fun isCountryLike(value: String): Boolean =
+        value.length == 3 &&
+            value.all { it.isLetter() || it == '<' } &&
+            value.count(Char::isLetter) >= 2
+
     private fun parseName(field: String): Pair<String, List<String>> {
         val sections = field.trim('<').split("<<", limit = 2)
         val surname = cleanName(sections.firstOrNull().orEmpty())
-        val givenNames = sections.getOrNull(1).orEmpty().split('<').filter { it.isNotBlank() }
+        val givenNames = sections
+            .getOrNull(1)
+            .orEmpty()
+            .split('<')
+            .filter { it.isNotBlank() }
         return surname to givenNames
     }
 
     private fun clean(value: String): String = value.trim('<')
+
     private fun cleanName(value: String): String =
         value.trim('<').replace('<', ' ').replace(Regex("\\s+"), " ").trim()
 
