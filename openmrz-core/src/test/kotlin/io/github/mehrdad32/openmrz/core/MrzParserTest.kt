@@ -1,6 +1,7 @@
 package io.github.mehrdad32.openmrz.core
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -19,6 +20,8 @@ class MrzParserTest {
         assertEquals(listOf("ANNA", "MARIA"), result.document.givenNames)
         assertEquals("L898902C", result.document.documentNumber)
         assertEquals("UTO", result.document.nationality)
+        assertTrue(result.document.validation.checkDigitsValid)
+        assertTrue(result.document.validation.fields.isValid)
         assertTrue(result.document.validation.isValid)
     }
 
@@ -47,6 +50,32 @@ class MrzParserTest {
 
         assertEquals(MrzFormat.TD1, result.document.format)
         assertEquals("D23145890", result.document.documentNumber)
+        assertTrue(result.document.validation.isValid)
+    }
+
+    @Test
+    fun `does not call a structurally corrupted passport valid even when checksums happen to pass`() {
+        val result = MrzParser.parse(
+            """
+            7<<<BP<USAJANE<<MARY<<<<<<<<S<<<<<G<<<G<<<S8
+            9102392482USA6401171F1811205900781200<129676
+            """.trimIndent()
+        ) as MrzParseResult.Success
+
+        assertFalse(result.document.validation.fields.documentCode)
+        assertFalse(result.document.validation.isValid)
+    }
+
+    @Test
+    fun `accepts the valid US passport MRZ sample`() {
+        val result = MrzParser.parse(
+            """
+            P<USAJANE<<MARY<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+            9102392482USA6401171F1812051900781200<129676
+            """.trimIndent()
+        ) as MrzParseResult.Success
+
+        assertEquals(MrzSex.FEMALE, result.document.sex)
         assertTrue(result.document.validation.isValid)
     }
 }
