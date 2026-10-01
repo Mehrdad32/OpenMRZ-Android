@@ -15,7 +15,7 @@ OpenMRZ reads and validates Machine Readable Zones (MRZ) on passports, visas, re
 - CameraX live scanner
 - Gallery image testing
 - Tesseract 5 OCR via Tesseract4Android
-- Android 5.0+ (API 21)
+- Android 6.0+ (API 23)
 
 ## Modules
 
