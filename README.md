@@ -2,7 +2,7 @@
 
 Free, offline-first, open-source MRZ scanning SDK for Android.
 
-> Current prerelease: **v0.2.0-beta.4**
+> Current prerelease: **v0.2.0-beta.5**
 
 OpenMRZ is SDK-first. The sample APK only demonstrates the same public APIs shipped in the AARs.
 
@@ -65,7 +65,7 @@ Complete scanner:
 
 ```kotlin
 implementation(
-    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-android:v0.2.0-beta.4"
+    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-android:v0.2.0-beta.5"
 )
 ```
 
@@ -73,7 +73,7 @@ OCR only:
 
 ```kotlin
 implementation(
-    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-ocr:v0.2.0-beta.4"
+    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-ocr:v0.2.0-beta.5"
 )
 ```
 
@@ -81,7 +81,7 @@ Parser only:
 
 ```kotlin
 implementation(
-    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-core:v0.2.0-beta.4"
+    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-core:v0.2.0-beta.5"
 )
 ```
 
@@ -99,7 +99,7 @@ Applications that already capture or crop documents do not need the CameraX arti
 
 ```kotlin
 implementation(
-    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-ocr:v0.2.0-beta.4"
+    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-ocr:v0.2.0-beta.5"
 )
 ```
 
@@ -143,7 +143,7 @@ The host app owns runtime camera-permission UX. Call `scanner.close()` when the 
 ## Trust model
 
 - `validation.checkDigitsValid`: ICAO check digits agree.
-- `validation.isValid`: check digits plus structural validation agree.
+- `validation.isValid`: check digits plus structural validation agree, including recognized ISO/ICAO issuing-state and nationality codes.
 - `result.isTrusted`: OCR result reached `VERIFIED`.
 
 OpenMRZ reads sex from the MRZ field; it never infers it from a portrait.
