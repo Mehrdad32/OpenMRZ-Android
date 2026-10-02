@@ -14,7 +14,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import ir.mehrdad32.openmrz.ocr.MrzOcrResult
 import ir.mehrdad32.openmrz.ocr.MrzScanStatus
-import ir.mehrdad32.openmrz.ocr.TesseractMrzRecognizer
+import ir.mehrdad32.openmrz.ocr.OpenMrzImageRecognizer
 import java.io.Closeable
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -48,7 +48,7 @@ class OpenMrzScanner(
     @Volatile
     private var closed = false
 
-    private var recognizer: TesseractMrzRecognizer? = null
+    private var recognizer: OpenMrzImageRecognizer? = null
     private var provider: ProcessCameraProvider? = null
     private var camera: Camera? = null
     private var previewUseCase: Preview? = null
@@ -188,7 +188,7 @@ class OpenMrzScanner(
 
             // The CameraX ROI is already an MRZ-oriented crop. Do not run the
             // still-image region detector a second time.
-            val result = ensureRecognizer().recognizeCropped(roi)
+            val result = ensureRecognizer().recognizeMrzCrop(roi)
             roi.recycle()
 
             if (
@@ -205,11 +205,11 @@ class OpenMrzScanner(
         }
     }
 
-    private fun ensureRecognizer(): TesseractMrzRecognizer {
+    private fun ensureRecognizer(): OpenMrzImageRecognizer {
         val current = recognizer
         if (current != null) return current
 
-        return TesseractMrzRecognizer(
+        return OpenMrzImageRecognizer(
             context = appContext,
             config = config.recognition,
         ).also {
