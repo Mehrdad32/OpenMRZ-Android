@@ -10,8 +10,8 @@ android {
         applicationId = "ir.mehrdad32.openmrz.sample"
         minSdk = 23
         targetSdk = 36
-        versionCode = 4
-        versionName = (System.getenv("VERSION") ?: "v0.2.0-beta.2-dev").removePrefix("v")
+        versionCode = 5
+        versionName = (System.getenv("VERSION") ?: "v0.2.0-beta.3-dev").removePrefix("v")
     }
 
     compileOptions {

@@ -61,13 +61,13 @@ jobs:
           prerelease: true
           generate_release_notes: true
           body: |
-            OpenMRZ performance beta.
+            OpenMRZ beta 3 scanner UI refinement.
 
-            - Dual MRZ OCR models: FAST first, BEST fallback
-            - BALANCED mode stops on checksum+structure-valid reads
-            - 1280px fast preprocessing / 1800px accurate fallback
-            - Fallback crops are probed cheaply before BEST OCR
-            - processingTimeMs, attemptCount and selected engine are exposed
+            - MRZ guide moved to the center of the usable camera area
+            - Camera OCR ROI and the visible guide now use the same normalized bounds
+            - Detailed OCR output no longer covers the live camera preview
+            - Tap the status banner to open full selectable/copyable scan details
+            - Beta 2 dual-model OCR and performance improvements are retained
             - ir.mehrdad32.openmrz.* remains the public package namespace
 
             Assets include both SDK AARs, the sample APK, and SHA-256 checksums.
