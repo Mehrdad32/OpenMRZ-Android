@@ -55,7 +55,7 @@ class MrzParserTest {
     fun `rejects OCR garbage name fields without ICAO separator`() {
         val result = MrzParser.parse(
             """
-            P<<<<<<<<<<<<<<<<<<<<<<<<<JINITLCJO7TOC9BO<S<
+            <<<<<<<<<<<<<<<<<<<<<<<<<JINITLCJO7TOC9BO<S<
             91O2592482USA6401171F1812051900781200<129676
             """.trimIndent()
         ) as MrzParseResult.Success
