@@ -69,6 +69,10 @@ class TesseractMrzRecognizer(
         var regionDetected = false
 
         fun finish(): MrzOcrResult {
+            if (!attempts.any(::isFullyValid)) {
+                attempts += buildEnsembleAttempts(attempts)
+            }
+
             val best = attempts.maxByOrNull(::attemptScore) ?: OcrAttempt(
                 rawText = "",
                 confidence = 0,
@@ -382,6 +386,62 @@ class TesseractMrzRecognizer(
             tess.meanConfidence().coerceIn(0, 100)
     }
 
+    private fun buildEnsembleAttempts(
+        source: List<OcrAttempt>,
+    ): List<OcrAttempt> {
+        if (source.size < 2) return emptyList()
+
+        val output = mutableListOf<OcrAttempt>()
+        val seen = source.mapTo(mutableSetOf()) { it.post.text }
+
+        for (length in intArrayOf(44, 36)) {
+            val firstLines = source.mapNotNull { attempt ->
+                attempt.post.text
+                    .lineSequence()
+                    .toList()
+                    .getOrNull(0)
+                    ?.takeIf { it.length == length }
+                    ?.let { attempt to it }
+            }
+            val secondLines = source.mapNotNull { attempt ->
+                attempt.post.text
+                    .lineSequence()
+                    .toList()
+                    .getOrNull(1)
+                    ?.takeIf { it.length == length }
+                    ?.let { attempt to it }
+            }
+
+            for ((firstAttempt, firstLine) in firstLines) {
+                for ((secondAttempt, secondLine) in secondLines) {
+                    if (firstAttempt === secondAttempt) continue
+
+                    val text = firstLine + "\n" + secondLine
+                    if (!seen.add(text)) continue
+
+                    val post = MrzOcrPostProcessor.parse(text)
+                    if (post.parseResult !is MrzParseResult.Success) continue
+
+                    output += OcrAttempt(
+                        rawText = text,
+                        confidence = (firstAttempt.confidence + secondAttempt.confidence) / 2,
+                        post = post,
+                        engine = MrzOcrEngine.ENSEMBLE,
+                        region = secondAttempt.region,
+                    )
+                }
+            }
+        }
+
+        return output
+    }
+
+    private fun isFullyValid(attempt: OcrAttempt): Boolean {
+        val parsed = attempt.post.parseResult as? MrzParseResult.Success
+            ?: return false
+        return parsed.document.validation.isValid
+    }
+
     private fun shouldStopBalanced(attempt: OcrAttempt): Boolean {
         val parsed = attempt.post.parseResult as? MrzParseResult.Success
             ?: return false
@@ -443,10 +503,10 @@ class TesseractMrzRecognizer(
                 attempt.post.correctionCount <= config.maxTrustedCorrections ->
                 MrzScanStatus.VERIFIED
 
-            validation.checkDigitsValid ->
+            validation.isValid ->
                 MrzScanStatus.CHECKSUM_VALID_LOW_CONFIDENCE
 
-            validation.fields.isValid ->
+            validation.checkDigitsValid || validation.fields.isValid ->
                 MrzScanStatus.NEEDS_REVIEW
 
             else ->
