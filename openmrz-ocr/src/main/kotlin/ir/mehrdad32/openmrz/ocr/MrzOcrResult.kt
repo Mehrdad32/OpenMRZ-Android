@@ -12,6 +12,7 @@ enum class MrzScanStatus {
 enum class MrzOcrEngine {
     FAST,
     BEST,
+    GENERIC,
 }
 
 data class MrzOcrResult(

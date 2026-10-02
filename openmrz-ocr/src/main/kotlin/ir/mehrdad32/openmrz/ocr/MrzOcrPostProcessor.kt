@@ -5,6 +5,7 @@ import ir.mehrdad32.openmrz.core.MrzFormat
 import ir.mehrdad32.openmrz.core.MrzParseResult
 import ir.mehrdad32.openmrz.core.MrzParser
 import ir.mehrdad32.openmrz.core.MrzValidation
+import kotlin.math.abs
 
 internal data class MrzPostProcessResult(
     val text: String,
@@ -64,6 +65,9 @@ internal object MrzOcrPostProcessor {
                 val variants = window.mapIndexed { index, line ->
                     lineVariants(layout, index, line)
                 }
+                val lengthPenalty = window.sumOf { line ->
+                    abs(line.length - layout.length) * 150
+                }
 
                 for (combination in cartesian(variants)) {
                     val text = combination.joinToString("\n") { it.text }
@@ -74,7 +78,7 @@ internal object MrzOcrPostProcessor {
                             text = text,
                             result = parsed,
                             corrections = corrections,
-                            score = score(parsed.document.validation, corrections),
+                            score = score(parsed.document.validation, corrections) - lengthPenalty,
                         )
 
                         if (best == null || candidate.score > best.score) {
@@ -135,8 +139,13 @@ internal object MrzOcrPostProcessor {
                 else -> {
                     val overflow = line.length - layout.length
                     if (overflow <= 14) {
-                        for (start in 0..overflow) {
-                            resized += line.substring(start, start + layout.length)
+                        val compacted = compactFillerOverflow(line, layout.length)
+                        if (compacted.isNotEmpty()) {
+                            resized += compacted
+                        } else {
+                            for (start in 0..overflow) {
+                                resized += line.substring(start, start + layout.length)
+                            }
                         }
                     }
                 }
@@ -144,15 +153,15 @@ internal object MrzOcrPostProcessor {
         }
 
         return resized
-            .map { normalizeForLayout(layout.format, lineIndex, it) }
+            .flatMap { normalizeVariantsForLayout(layout.format, lineIndex, it) }
             .distinctBy { it.text }
     }
 
-    private fun normalizeForLayout(
+    private fun normalizeVariantsForLayout(
         format: MrzFormat,
         lineIndex: Int,
         source: String,
-    ): NormalizedLine {
+    ): List<NormalizedLine> {
         var corrections = 0
         val out = CharArray(source.length)
 
@@ -163,9 +172,55 @@ internal object MrzOcrPostProcessor {
             out[index] = corrected
         }
 
-        corrections += repairDocumentNumberByChecksum(format, lineIndex, out)
+        val base = NormalizedLine(String(out), corrections)
+        val repaired = out.copyOf()
+        val repairCount = repairDocumentNumberByChecksum(format, lineIndex, repaired)
 
-        return NormalizedLine(String(out), corrections)
+        return if (repairCount > 0 && !repaired.contentEquals(out)) {
+            listOf(
+                base,
+                NormalizedLine(String(repaired), corrections + repairCount),
+            )
+        } else {
+            listOf(base)
+        }
+    }
+
+    private fun compactFillerOverflow(
+        source: String,
+        targetLength: Int,
+    ): List<String> {
+        val extra = source.length - targetLength
+        if (extra !in 1..4) return emptyList()
+
+        val candidates = mutableListOf<String>()
+        var index = 0
+
+        while (index < source.length) {
+            if (source[index] != '<') {
+                index++
+                continue
+            }
+
+            val start = index
+            while (index < source.length && source[index] == '<') {
+                index++
+            }
+            val runLength = index - start
+
+            if (runLength > extra) {
+                val shortened = buildString(targetLength) {
+                    append(source, 0, start)
+                    repeat(runLength - extra) { append('<') }
+                    append(source, index, source.length)
+                }
+                if (shortened.length == targetLength) {
+                    candidates += shortened
+                }
+            }
+        }
+
+        return candidates.distinct()
     }
 
     private fun repairDocumentNumberByChecksum(
@@ -388,7 +443,7 @@ internal object MrzOcrPostProcessor {
         (if (validation.isValid) 10_000 else 0) +
             (if (validation.checkDigitsValid) 5_000 else 0) +
             (if (validation.fields.isValid) 2_000 else 0) +
-            (if (validation.documentNumber) 300 else 0) +
+            (if (validation.documentNumber) 120 else 0) +
             (if (validation.birthDate) 300 else 0) +
             (if (validation.expiryDate) 300 else 0) +
             (if (validation.optionalData != false) 100 else 0) +
@@ -396,5 +451,5 @@ internal object MrzOcrPostProcessor {
             (if (validation.fields.documentCode) 150 else 0) +
             (if (validation.fields.issuingState) 100 else 0) +
             (if (validation.fields.nationality) 100 else 0) -
-            corrections * 20
+            corrections * 70
 }

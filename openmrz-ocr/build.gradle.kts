@@ -40,9 +40,12 @@ val fastTessdata = layout.projectDirectory.file(
 val bestTessdata = layout.projectDirectory.file(
     "src/main/assets/tessdata/mrz_best.traineddata"
 )
+val genericTessdata = layout.projectDirectory.file(
+    "src/main/assets/tessdata/eng_fast.traineddata"
+)
 
 tasks.register("prepareTessdata") {
-    outputs.files(fastTessdata, bestTessdata)
+    outputs.files(fastTessdata, bestTessdata, genericTessdata)
 
     doLast {
         fun download(
@@ -69,6 +72,11 @@ tasks.register("prepareTessdata") {
             bestTessdata.asFile,
             "https://raw.githubusercontent.com/DoubangoTelecom/tesseractMRZ/master/tessdata_best/mrz.traineddata",
             10_000_000L,
+        )
+        download(
+            genericTessdata.asFile,
+            "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/eng.traineddata",
+            3_000_000L,
         )
     }
 }

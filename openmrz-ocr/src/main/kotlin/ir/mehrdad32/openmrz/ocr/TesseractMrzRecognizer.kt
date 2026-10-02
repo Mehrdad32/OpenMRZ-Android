@@ -31,6 +31,7 @@ class TesseractMrzRecognizer(
     private val dataRoot = File(appContext.filesDir, "openmrz")
     private val fastTess: TessBaseAPI
     private var bestTess: TessBaseAPI? = null
+    private var genericTess: TessBaseAPI? = null
     private var closed = false
 
     init {
@@ -52,6 +53,8 @@ class TesseractMrzRecognizer(
             fastTess.recycle()
             bestTess?.recycle()
             bestTess = null
+            genericTess?.recycle()
+            genericTess = null
         }
     }
 
@@ -178,6 +181,42 @@ class TesseractMrzRecognizer(
             return false
         }
 
+        fun runGeneric(kind: RegionKind): Boolean {
+            val region = createRegion(bitmap, kind)
+            try {
+                val tess = genericEngine()
+                val contrast = MrzImagePreprocessor.prepareContrast(
+                    region.first,
+                    config.genericTargetWidth,
+                )
+                try {
+                    val block = runAttempt(
+                        tess = tess,
+                        bitmap = contrast,
+                        pageSegMode = TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK,
+                        engine = MrzOcrEngine.GENERIC,
+                        region = kind,
+                    )
+                    attempts += block
+                    if (shouldStopBalanced(block)) return true
+
+                    collectLineAttempt(
+                        tess = tess,
+                        bitmap = contrast,
+                        output = attempts,
+                        engine = MrzOcrEngine.GENERIC,
+                        region = kind,
+                    )
+                } finally {
+                    contrast.recycle()
+                }
+            } finally {
+                region.first.recycle()
+            }
+
+            return hasChecksumValidAttempt(attempts)
+        }
+
         if (!autoDetectRegion) {
             if (runFast(RegionKind.CROPPED)) return finish()
             if (config.mode == MrzRecognitionMode.FAST) return finish()
@@ -186,6 +225,10 @@ class TesseractMrzRecognizer(
                 kind = RegionKind.CROPPED,
                 exhaustive = config.mode == MrzRecognitionMode.ACCURATE,
             )
+
+            if (!hasChecksumValidAttempt(attempts)) {
+                runGeneric(RegionKind.CROPPED)
+            }
             return finish()
         }
 
@@ -203,6 +246,9 @@ class TesseractMrzRecognizer(
 
         if (config.mode == MrzRecognitionMode.BALANCED) {
             runBest(preferredRegion, exhaustive = false)
+            if (!hasChecksumValidAttempt(attempts)) {
+                runGeneric(preferredRegion)
+            }
             return finish()
         }
 
@@ -217,6 +263,10 @@ class TesseractMrzRecognizer(
 
         for (kind in order) {
             if (runBest(kind, exhaustive = true)) break
+        }
+
+        if (!hasChecksumValidAttempt(attempts)) {
+            runGeneric(preferredRegion)
         }
 
         return finish()
@@ -344,6 +394,13 @@ class TesseractMrzRecognizer(
     private fun hasUsefulAttempt(attempts: List<OcrAttempt>): Boolean =
         attempts.any(::isUseful)
 
+    private fun hasChecksumValidAttempt(attempts: List<OcrAttempt>): Boolean =
+        attempts.any { attempt ->
+            val parsed = attempt.post.parseResult as? MrzParseResult.Success
+                ?: return@any false
+            parsed.document.validation.checkDigitsValid
+        }
+
     private fun isUseful(attempt: OcrAttempt): Boolean {
         val parsed = attempt.post.parseResult as? MrzParseResult.Success
             ?: return false
@@ -366,12 +423,12 @@ class TesseractMrzRecognizer(
         return (if (validation.isValid) 20_000 else 0) +
             (if (validation.checkDigitsValid) 10_000 else 0) +
             (if (validation.fields.isValid) 4_000 else 0) +
-            (if (validation.documentNumber) 500 else 0) +
-            (if (validation.birthDate) 500 else 0) +
-            (if (validation.expiryDate) 500 else 0) +
-            (if (validation.composite) 800 else 0) +
-            attempt.confidence -
-            attempt.post.correctionCount * 25
+            (if (validation.documentNumber) 80 else 0) +
+            (if (validation.birthDate) 80 else 0) +
+            (if (validation.expiryDate) 80 else 0) +
+            (if (validation.composite) 200 else 0) +
+            attempt.confidence * 5 -
+            attempt.post.correctionCount * 60
     }
 
     private fun statusFor(attempt: OcrAttempt): MrzScanStatus {
@@ -418,6 +475,14 @@ class TesseractMrzRecognizer(
         return createTess(BEST_LANGUAGE).also { bestTess = it }
     }
 
+    private fun genericEngine(): TessBaseAPI {
+        val current = genericTess
+        if (current != null) return current
+
+        ensureLanguageData(GENERIC_LANGUAGE, GENERIC_MIN_MODEL_BYTES)
+        return createTess(GENERIC_LANGUAGE).also { genericTess = it }
+    }
+
     private fun ensureLanguageData(
         language: String,
         minBytes: Long,
@@ -438,7 +503,9 @@ class TesseractMrzRecognizer(
     private companion object {
         const val FAST_LANGUAGE = "mrz_fast"
         const val BEST_LANGUAGE = "mrz_best"
+        const val GENERIC_LANGUAGE = "eng_fast"
         const val FAST_MIN_MODEL_BYTES = 1_000_000L
         const val BEST_MIN_MODEL_BYTES = 10_000_000L
+        const val GENERIC_MIN_MODEL_BYTES = 3_000_000L
     }
 }
