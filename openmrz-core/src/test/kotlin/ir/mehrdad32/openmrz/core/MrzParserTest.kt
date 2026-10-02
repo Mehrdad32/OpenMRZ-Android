@@ -52,6 +52,22 @@ class MrzParserTest {
     }
 
     @Test
+    fun `rejects unknown three letter issuer code even when checksums are valid`() {
+        val result = MrzParser.parse(
+            """
+            P<DELAPAZ<<MICHELLE<<<<<<<<<<<<<<<<<<<<<<<<<
+            9102392482USA6401171F1812051900781200<129676
+            """.trimIndent()
+        ) as MrzParseResult.Success
+
+        assertEquals("DEL", result.document.issuingState)
+        assertEquals("APAZ", result.document.surname)
+        assertTrue(result.document.validation.checkDigitsValid)
+        assertFalse(result.document.validation.fields.issuingState)
+        assertFalse(result.document.validation.isValid)
+    }
+
+    @Test
     fun `rejects filler inside issuing state`() {
         val result = MrzParser.parse(
             """
