@@ -211,6 +211,12 @@ object MrzParser {
             -> documentCode.firstOrNull()?.isLetter() == true
         } && documentCode.all { it.isLetter() || it == '<' }
 
+        val nameSeparator = nameField.indexOf("<<")
+        val namesValid =
+            nameSeparator > 0 &&
+                nameField.substring(0, nameSeparator).any(Char::isLetter) &&
+                nameField.all { it.isLetter() || it == '<' }
+
         return MrzFieldValidation(
             documentCode = codeValid,
             issuingState = MrzCountryCodes.isValid(issuingState),
@@ -218,7 +224,7 @@ object MrzParser {
             birthDateFormat = isValidMrzDate(birthDate),
             expiryDateFormat = isValidMrzDate(expiryDate),
             sex = sex == 'M' || sex == 'F' || sex == 'X' || sex == '<',
-            names = nameField.any(Char::isLetter) && nameField.all { it.isLetter() || it == '<' },
+            names = namesValid,
         )
     }
 

@@ -2,7 +2,7 @@
 
 Free, offline-first, open-source MRZ scanning SDK for Android.
 
-> Current prerelease: **v0.2.0-beta.5**
+> Current prerelease: **v0.2.0-beta.6**
 
 OpenMRZ is SDK-first. The sample APK only demonstrates the same public APIs shipped in the AARs.
 
@@ -37,10 +37,10 @@ MrzRecognizerConfig(
 ```
 
 - `FAST`: small MRZ model, one primary pass.
-- `BALANCED`: small MRZ model first, then the larger best model only when needed; a generic English fallback is tried only when checksum validation still fails. Recommended default.
+- `BALANCED`: FAST MRZ OCR first; if the result is plausible but not checksum-valid, one targeted generic OCR pass is run only for the second MRZ line. Recommended default.
 - `ACCURATE`: exhaustive best-model preprocessing/crops and line OCR when required.
 
-A checksum+structure-valid fast-model read stops immediately. Fallback crops are first probed with the small model; the larger model is used only when needed. Results expose:
+A checksum-valid FAST read stops immediately. BALANCED avoids the expensive BEST model entirely; BEST/exhaustive OCR is reserved for ACCURATE mode. Results expose:
 
 ```kotlin
 result.processingTimeMs
@@ -65,7 +65,7 @@ Complete scanner:
 
 ```kotlin
 implementation(
-    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-android:v0.2.0-beta.5"
+    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-android:v0.2.0-beta.6"
 )
 ```
 
@@ -73,7 +73,7 @@ OCR only:
 
 ```kotlin
 implementation(
-    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-ocr:v0.2.0-beta.5"
+    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-ocr:v0.2.0-beta.6"
 )
 ```
 
@@ -81,7 +81,7 @@ Parser only:
 
 ```kotlin
 implementation(
-    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-core:v0.2.0-beta.5"
+    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-core:v0.2.0-beta.6"
 )
 ```
 
@@ -99,7 +99,7 @@ Applications that already capture or crop documents do not need the CameraX arti
 
 ```kotlin
 implementation(
-    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-ocr:v0.2.0-beta.5"
+    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-ocr:v0.2.0-beta.6"
 )
 ```
 

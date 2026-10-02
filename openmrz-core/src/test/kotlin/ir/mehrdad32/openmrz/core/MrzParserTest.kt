@@ -52,6 +52,19 @@ class MrzParserTest {
     }
 
     @Test
+    fun `rejects OCR garbage name fields without ICAO separator`() {
+        val result = MrzParser.parse(
+            """
+            <<<<<<<<<<<<<<<<<<<<<<<<<JINITLCJO7TOC9BO<S<
+            91O2592482USA6401171F1812051900781200<129676
+            """.trimIndent()
+        ) as MrzParseResult.Success
+
+        assertFalse(result.document.validation.fields.names)
+        assertFalse(result.document.validation.isValid)
+    }
+
+    @Test
     fun `rejects unknown three letter issuer code even when checksums are valid`() {
         val result = MrzParser.parse(
             """
