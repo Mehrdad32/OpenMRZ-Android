@@ -69,10 +69,6 @@ class TesseractMrzRecognizer(
         var regionDetected = false
 
         fun finish(): MrzOcrResult {
-            if (!attempts.any(::isFullyValid)) {
-                attempts += buildEnsembleAttempts(attempts)
-            }
-
             val best = attempts.maxByOrNull(::attemptScore) ?: OcrAttempt(
                 rawText = "",
                 confidence = 0,
@@ -166,7 +162,19 @@ class TesseractMrzRecognizer(
                         binary.recycle()
                     }
 
-                    if (!hasUsefulAttempt(attempts)) {
+                    val usefulBest = attempts
+                        .filter { it.engine == MrzOcrEngine.BEST }
+                        .any { attempt ->
+                            val parsed = attempt.post.parseResult as? MrzParseResult.Success
+                            parsed != null &&
+                                (
+                                    parsed.document.validation.isValid ||
+                                        parsed.document.validation.checkDigitsValid ||
+                                        parsed.document.validation.fields.isValid
+                                )
+                        }
+
+                    if (!usefulBest) {
                         collectLineAttempt(
                             tess = tess,
                             bitmap = contrast,
@@ -185,92 +193,130 @@ class TesseractMrzRecognizer(
             return false
         }
 
-        fun runGeneric(kind: RegionKind): Boolean {
+        fun runHybridSecondLine(
+            kind: RegionKind,
+            base: OcrAttempt,
+        ): Boolean {
+            val baseLines = base.post.text.lineSequence().toList()
+            if (baseLines.size != 2) return false
+
             val region = createRegion(bitmap, kind)
             try {
-                val tess = genericEngine()
-                val contrast = MrzImagePreprocessor.prepareContrast(
+                val prepared = MrzImagePreprocessor.prepareContrast(
                     region.first,
                     config.genericTargetWidth,
                 )
-                try {
-                    val block = runAttempt(
-                        tess = tess,
-                        bitmap = contrast,
-                        pageSegMode = TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK,
-                        engine = MrzOcrEngine.GENERIC,
-                        region = kind,
-                    )
-                    attempts += block
-                    if (shouldStopBalanced(block)) return true
 
-                    collectLineAttempt(
-                        tess = tess,
-                        bitmap = contrast,
-                        output = attempts,
-                        engine = MrzOcrEngine.GENERIC,
-                        region = kind,
-                    )
+                try {
+                    val lineBitmaps = MrzRegionDetector.splitLines(prepared)
+                    if (lineBitmaps.size != 2) {
+                        lineBitmaps.forEach { if (!it.isRecycled) it.recycle() }
+                        return false
+                    }
+
+                    try {
+                        val (secondText, secondConfidence) = runRaw(
+                            tess = genericEngine(),
+                            bitmap = lineBitmaps[1],
+                            pageSegMode = TessBaseAPI.PageSegMode.PSM_SINGLE_LINE,
+                        )
+
+                        val combined = baseLines[0] + "\n" + secondText.trim()
+                        val hybrid = OcrAttempt(
+                            rawText = combined,
+                            confidence = (base.confidence + secondConfidence) / 2,
+                            post = MrzOcrPostProcessor.parse(combined),
+                            engine = MrzOcrEngine.HYBRID,
+                            region = kind,
+                        )
+                        attempts += hybrid
+
+                        return shouldStopBalanced(hybrid)
+                    } finally {
+                        lineBitmaps.forEach { if (!it.isRecycled) it.recycle() }
+                    }
                 } finally {
-                    contrast.recycle()
+                    prepared.recycle()
                 }
             } finally {
                 region.first.recycle()
             }
-
-            return hasChecksumValidAttempt(attempts)
         }
 
         if (!autoDetectRegion) {
             if (runFast(RegionKind.CROPPED)) return finish()
             if (config.mode == MrzRecognitionMode.FAST) return finish()
 
-            runBest(
-                kind = RegionKind.CROPPED,
-                exhaustive = config.mode == MrzRecognitionMode.ACCURATE,
-            )
-
-            if (!hasChecksumValidAttempt(attempts)) {
-                runGeneric(RegionKind.CROPPED)
+            val fast = bestFastAttempt(attempts)
+            if (fast != null && isChecksumValid(fast)) {
+                return finish()
             }
+
+            if (fast != null && isPlausibleCandidate(fast)) {
+                runHybridSecondLine(RegionKind.CROPPED, fast)
+                if (config.mode == MrzRecognitionMode.BALANCED) {
+                    return finish()
+                }
+            }
+
+            if (config.mode == MrzRecognitionMode.ACCURATE) {
+                runBest(
+                    kind = RegionKind.CROPPED,
+                    exhaustive = true,
+                )
+            }
+
             return finish()
         }
 
         if (runFast(RegionKind.DETECTED)) return finish()
         if (config.mode == MrzRecognitionMode.FAST) return finish()
 
-        if (runFast(RegionKind.BOTTOM_52)) return finish()
-        if (runFast(RegionKind.BOTTOM_64)) return finish()
+        var fast = bestFastAttempt(attempts)
 
-        val preferredRegion = attempts
-            .filter { it.engine == MrzOcrEngine.FAST }
-            .maxByOrNull(::attemptScore)
-            ?.region
-            ?: RegionKind.DETECTED
-
-        if (config.mode == MrzRecognitionMode.BALANCED) {
-            runBest(preferredRegion, exhaustive = false)
-            if (!hasChecksumValidAttempt(attempts)) {
-                runGeneric(preferredRegion)
-            }
+        if (fast != null && isChecksumValid(fast)) {
             return finish()
         }
 
-        // Accurate mode keeps the expensive path, but only after all fast-model
-        // candidates failed to produce a fully valid MRZ.
-        val order = listOf(
-            preferredRegion,
-            RegionKind.DETECTED,
-            RegionKind.BOTTOM_52,
-            RegionKind.BOTTOM_64,
-        ).distinct()
+        if (fast == null || !isPlausibleCandidate(fast)) {
+            if (runFast(RegionKind.BOTTOM_52)) return finish()
+            fast = bestFastAttempt(attempts)
 
-        for (kind in order) {
-            if (runBest(kind, exhaustive = true)) break
+            if (fast != null && isChecksumValid(fast)) {
+                return finish()
+            }
         }
 
-        if (!hasChecksumValidAttempt(attempts)) {
-            runGeneric(preferredRegion)
+        if (fast == null || !isPlausibleCandidate(fast)) {
+            if (runFast(RegionKind.BOTTOM_64)) return finish()
+            fast = bestFastAttempt(attempts)
+
+            if (fast != null && isChecksumValid(fast)) {
+                return finish()
+            }
+        }
+
+        val preferredRegion = fast?.region ?: RegionKind.DETECTED
+
+        if (fast != null && isPlausibleCandidate(fast)) {
+            runHybridSecondLine(preferredRegion, fast)
+
+            if (config.mode == MrzRecognitionMode.BALANCED) {
+                return finish()
+            }
+        }
+
+        if (config.mode == MrzRecognitionMode.ACCURATE) {
+            val order = listOf(
+                preferredRegion,
+                RegionKind.DETECTED,
+                RegionKind.BOTTOM_52,
+                RegionKind.BOTTOM_64,
+            ).distinct()
+
+            for (kind in order) {
+                if (runBest(kind, exhaustive = true)) break
+            }
         }
 
         return finish()
@@ -386,60 +432,32 @@ class TesseractMrzRecognizer(
             tess.meanConfidence().coerceIn(0, 100)
     }
 
-    private fun buildEnsembleAttempts(
-        source: List<OcrAttempt>,
-    ): List<OcrAttempt> {
-        if (source.size < 2) return emptyList()
+    private fun bestFastAttempt(attempts: List<OcrAttempt>): OcrAttempt? =
+        attempts
+            .asSequence()
+            .filter { it.engine == MrzOcrEngine.FAST }
+            .maxByOrNull(::attemptScore)
 
-        val output = mutableListOf<OcrAttempt>()
-        val seen = source.mapTo(mutableSetOf()) { it.post.text }
-
-        for (length in intArrayOf(44, 36)) {
-            val firstLines = source.mapNotNull { attempt ->
-                attempt.post.text
-                    .lineSequence()
-                    .toList()
-                    .getOrNull(0)
-                    ?.takeIf { it.length == length }
-                    ?.let { attempt to it }
-            }
-            val secondLines = source.mapNotNull { attempt ->
-                attempt.post.text
-                    .lineSequence()
-                    .toList()
-                    .getOrNull(1)
-                    ?.takeIf { it.length == length }
-                    ?.let { attempt to it }
-            }
-
-            for ((firstAttempt, firstLine) in firstLines) {
-                for ((secondAttempt, secondLine) in secondLines) {
-                    if (firstAttempt === secondAttempt) continue
-
-                    val text = firstLine + "\n" + secondLine
-                    if (!seen.add(text)) continue
-
-                    val post = MrzOcrPostProcessor.parse(text)
-                    if (post.parseResult !is MrzParseResult.Success) continue
-
-                    output += OcrAttempt(
-                        rawText = text,
-                        confidence = (firstAttempt.confidence + secondAttempt.confidence) / 2,
-                        post = post,
-                        engine = MrzOcrEngine.ENSEMBLE,
-                        region = secondAttempt.region,
-                    )
-                }
-            }
-        }
-
-        return output
-    }
-
-    private fun isFullyValid(attempt: OcrAttempt): Boolean {
+    private fun isChecksumValid(attempt: OcrAttempt): Boolean {
         val parsed = attempt.post.parseResult as? MrzParseResult.Success
             ?: return false
-        return parsed.document.validation.isValid
+        return parsed.document.validation.checkDigitsValid
+    }
+
+    private fun isPlausibleCandidate(attempt: OcrAttempt): Boolean {
+        val parsed = attempt.post.parseResult as? MrzParseResult.Success
+            ?: return false
+        val document = parsed.document
+        val fields = document.validation.fields
+
+        return document.documentNumber.isNotBlank() &&
+            document.documentCode.isNotBlank() &&
+            fields.documentCode &&
+            fields.nationality &&
+            fields.birthDateFormat &&
+            fields.expiryDateFormat &&
+            fields.sex &&
+            fields.names
     }
 
     private fun shouldStopBalanced(attempt: OcrAttempt): Boolean {
@@ -449,26 +467,6 @@ class TesseractMrzRecognizer(
         // Full ICAO checksum + structural validity is strong enough to stop
         // BALANCED mode. Confidence still controls whether result.isTrusted is true.
         return parsed.document.validation.isValid
-    }
-
-    private fun hasUsefulAttempt(attempts: List<OcrAttempt>): Boolean =
-        attempts.any(::isUseful)
-
-    private fun hasChecksumValidAttempt(attempts: List<OcrAttempt>): Boolean =
-        attempts.any { attempt ->
-            val parsed = attempt.post.parseResult as? MrzParseResult.Success
-                ?: return@any false
-            parsed.document.validation.checkDigitsValid
-        }
-
-    private fun isUseful(attempt: OcrAttempt): Boolean {
-        val parsed = attempt.post.parseResult as? MrzParseResult.Success
-            ?: return false
-        val validation = parsed.document.validation
-
-        return validation.isValid ||
-            validation.checkDigitsValid ||
-            validation.fields.isValid
     }
 
     private fun isVerified(attempt: OcrAttempt): Boolean =
