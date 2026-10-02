@@ -135,10 +135,13 @@ internal object MrzOcrPostProcessor {
                 else -> {
                     val overflow = line.length - layout.length
                     if (overflow <= 14) {
-                        resized += compactFillerOverflow(line, layout.length)
-
-                        for (start in 0..overflow) {
-                            resized += line.substring(start, start + layout.length)
+                        val compacted = compactFillerOverflow(line, layout.length)
+                        if (compacted.isNotEmpty()) {
+                            resized += compacted
+                        } else {
+                            for (start in 0..overflow) {
+                                resized += line.substring(start, start + layout.length)
+                            }
                         }
                     }
                 }
