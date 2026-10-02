@@ -13,6 +13,7 @@ enum class MrzOcrEngine {
     FAST,
     BEST,
     GENERIC,
+    ENSEMBLE,
 }
 
 data class MrzOcrResult(

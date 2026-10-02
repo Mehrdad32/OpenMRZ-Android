@@ -61,16 +61,14 @@ jobs:
           prerelease: true
           generate_release_notes: true
           body: |
-            OpenMRZ beta 4 recognition and tester workflow update.
+            OpenMRZ beta 5 validation and OCR ensemble update.
 
-            - Sample tester auto-pauses on VERIFIED, CHECKSUM_VALID_LOW_CONFIDENCE, or NEEDS_REVIEW
-            - Retry starts a clean scan for the next document
-            - Camera-independent OpenMrzImageRecognizer API accepts host-provided Bitmaps
-            - recognize() accepts full/cropped document images and auto-detects the MRZ
-            - recognizeMrzCrop() accepts an MRZ-only crop and skips region detection
-            - Generic English Tesseract fallback is used only for difficult ambiguous reads
-            - Two-glyph checksum forcing is reduced and excess filler no longer truncates trailing check digits
-            - CameraX scanner remains optional in the openmrz-android artifact
+            - Issuing-state and nationality codes are validated against ISO/ICAO code sets
+            - Checksum-valid but structurally suspicious MRZs now stay in NEEDS_REVIEW
+            - OCR attempts can be ensembled line-by-line to preserve a better visual read
+            - Generic OCR second-line results can beat checksum-driven FAST corrections
+            - Tester shows warnings for unrecognized issuer/nationality codes
+            - Beta 4 auto-pause/Retry and camera-independent Bitmap APIs are retained
 
             Assets include both SDK AARs, the sample APK, and SHA-256 checksums.
           files: |
