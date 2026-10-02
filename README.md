@@ -2,7 +2,7 @@
 
 Free, offline-first, open-source MRZ scanning SDK for Android.
 
-> Current prerelease: **v0.2.0-beta.2**
+> Current prerelease: **v0.2.0-beta.4**
 
 OpenMRZ is SDK-first. The sample APK only demonstrates the same public APIs shipped in the AARs.
 
@@ -37,7 +37,7 @@ MrzRecognizerConfig(
 ```
 
 - `FAST`: small MRZ model, one primary pass.
-- `BALANCED`: small MRZ model first, then the larger best model only when needed; recommended default.
+- `BALANCED`: small MRZ model first, then the larger best model only when needed; a generic English fallback is tried only when checksum validation still fails. Recommended default.
 - `ACCURATE`: exhaustive best-model preprocessing/crops and line OCR when required.
 
 A checksum+structure-valid fast-model read stops immediately. Fallback crops are first probed with the small model; the larger model is used only when needed. Results expose:
@@ -65,7 +65,7 @@ Complete scanner:
 
 ```kotlin
 implementation(
-    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-android:v0.2.0-beta.1"
+    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-android:v0.2.0-beta.4"
 )
 ```
 
@@ -73,7 +73,7 @@ OCR only:
 
 ```kotlin
 implementation(
-    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-ocr:v0.2.0-beta.1"
+    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-ocr:v0.2.0-beta.4"
 )
 ```
 
@@ -81,7 +81,7 @@ Parser only:
 
 ```kotlin
 implementation(
-    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-core:v0.2.0-beta.1"
+    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-core:v0.2.0-beta.4"
 )
 ```
 
@@ -92,6 +92,31 @@ import ir.mehrdad32.openmrz.android.OpenMrzScanner
 import ir.mehrdad32.openmrz.ocr.MrzOcrResult
 import ir.mehrdad32.openmrz.core.MrzParseResult
 ```
+
+## Image-only usage (no CameraX)
+
+Applications that already capture or crop documents do not need the CameraX artifact. Depend only on `openmrz-ocr`:
+
+```kotlin
+implementation(
+    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-ocr:v0.2.0-beta.4"
+)
+```
+
+Then pass a host-owned `Bitmap`:
+
+```kotlin
+OpenMrzImageRecognizer(context).use { recognizer ->
+    // Full camera frame or a cropped passport/ID image.
+    // OpenMRZ locates the MRZ region inside the supplied image.
+    val result = recognizer.recognize(documentBitmap)
+
+    // If your own pipeline already cropped tightly to the MRZ lines:
+    val mrzResult = recognizer.recognizeMrzCrop(mrzOnlyBitmap)
+}
+```
+
+The recognizer never recycles the caller's input Bitmap.
 
 ## Scanner usage
 
