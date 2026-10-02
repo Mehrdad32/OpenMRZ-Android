@@ -213,17 +213,14 @@ object MrzParser {
 
         return MrzFieldValidation(
             documentCode = codeValid,
-            issuingState = isThreeLetterCode(issuingState),
-            nationality = isThreeLetterCode(nationality),
+            issuingState = MrzCountryCodes.isValid(issuingState),
+            nationality = MrzCountryCodes.isValid(nationality),
             birthDateFormat = isValidMrzDate(birthDate),
             expiryDateFormat = isValidMrzDate(expiryDate),
             sex = sex == 'M' || sex == 'F' || sex == 'X' || sex == '<',
             names = nameField.any(Char::isLetter) && nameField.all { it.isLetter() || it == '<' },
         )
     }
-
-    private fun isThreeLetterCode(value: String): Boolean =
-        value.length == 3 && value.all { it in 'A'..'Z' }
 
     private fun isValidMrzDate(value: String): Boolean {
         if (value.length != 6 || !value.all(Char::isDigit)) return false
