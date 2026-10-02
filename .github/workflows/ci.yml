@@ -16,7 +16,7 @@ jobs:
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
       GROUP: ir.mehrdad32.openmrz
-      VERSION: 0.2.0-beta.4-ci
+      VERSION: 0.2.0-beta.5-ci
     steps:
       - uses: actions/checkout@v5
 
