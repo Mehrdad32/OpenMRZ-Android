@@ -5,6 +5,7 @@ import ir.mehrdad32.openmrz.core.MrzFormat
 import ir.mehrdad32.openmrz.core.MrzParseResult
 import ir.mehrdad32.openmrz.core.MrzParser
 import ir.mehrdad32.openmrz.core.MrzValidation
+import kotlin.math.abs
 
 internal data class MrzPostProcessResult(
     val text: String,
@@ -64,6 +65,9 @@ internal object MrzOcrPostProcessor {
                 val variants = window.mapIndexed { index, line ->
                     lineVariants(layout, index, line)
                 }
+                val lengthPenalty = window.sumOf { line ->
+                    abs(line.length - layout.length) * 150
+                }
 
                 for (combination in cartesian(variants)) {
                     val text = combination.joinToString("\n") { it.text }
@@ -74,7 +78,7 @@ internal object MrzOcrPostProcessor {
                             text = text,
                             result = parsed,
                             corrections = corrections,
-                            score = score(parsed.document.validation, corrections),
+                            score = score(parsed.document.validation, corrections) - lengthPenalty,
                         )
 
                         if (best == null || candidate.score > best.score) {
