@@ -61,14 +61,14 @@ jobs:
           prerelease: true
           generate_release_notes: true
           body: |
-            First OpenMRZ beta.
+            OpenMRZ performance beta.
 
-            - Final public package namespace: ir.mehrdad32.openmrz.*
-            - Progressive BALANCED OCR is now the default
-            - Verified first-pass reads return immediately
-            - Fallback crops/preprocessing run only when needed
-            - processingTimeMs and attemptCount are exposed for profiling
-            - Dedicated MRZ-trained model and alpha.3 accuracy fixes are retained
+            - Dual MRZ OCR models: FAST first, BEST fallback
+            - BALANCED mode stops on checksum+structure-valid reads
+            - 1280px fast preprocessing / 1800px accurate fallback
+            - Fallback crops are probed cheaply before BEST OCR
+            - processingTimeMs, attemptCount and selected engine are exposed
+            - ir.mehrdad32.openmrz.* remains the public package namespace
 
             Assets include both SDK AARs, the sample APK, and SHA-256 checksums.
           files: |

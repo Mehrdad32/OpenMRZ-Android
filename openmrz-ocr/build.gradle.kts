@@ -4,7 +4,7 @@ plugins {
 }
 
 group = System.getenv("GROUP") ?: "ir.mehrdad32.openmrz"
-version = System.getenv("VERSION") ?: "0.1.0-SNAPSHOT"
+version = System.getenv("VERSION") ?: "0.2.0-SNAPSHOT"
 
 android {
     namespace = "ir.mehrdad32.openmrz.ocr"
@@ -34,23 +34,42 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
 }
 
-val tessdataFile = layout.projectDirectory.file("src/main/assets/tessdata/mrz.traineddata")
+val fastTessdata = layout.projectDirectory.file(
+    "src/main/assets/tessdata/mrz_fast.traineddata"
+)
+val bestTessdata = layout.projectDirectory.file(
+    "src/main/assets/tessdata/mrz_best.traineddata"
+)
 
 tasks.register("prepareTessdata") {
-    outputs.file(tessdataFile)
+    outputs.files(fastTessdata, bestTessdata)
+
     doLast {
-        val output = tessdataFile.asFile
-        if (!output.exists() || output.length() < 10_000_000L) {
-            output.parentFile.mkdirs()
-            val url = uri(
-                "https://raw.githubusercontent.com/DoubangoTelecom/tesseractMRZ/master/tessdata_best/mrz.traineddata"
-            ).toURL()
-            url.openStream().use { input ->
-                output.outputStream().use { outputStream ->
-                    input.copyTo(outputStream)
+        fun download(
+            outputFile: File,
+            sourceUrl: String,
+            minBytes: Long,
+        ) {
+            if (!outputFile.exists() || outputFile.length() < minBytes) {
+                outputFile.parentFile.mkdirs()
+                uri(sourceUrl).toURL().openStream().use { input ->
+                    outputFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
                 }
             }
         }
+
+        download(
+            fastTessdata.asFile,
+            "https://raw.githubusercontent.com/DoubangoTelecom/tesseractMRZ/master/tessdata_fast/mrz.traineddata",
+            1_000_000L,
+        )
+        download(
+            bestTessdata.asFile,
+            "https://raw.githubusercontent.com/DoubangoTelecom/tesseractMRZ/master/tessdata_best/mrz.traineddata",
+            10_000_000L,
+        )
     }
 }
 
@@ -67,7 +86,7 @@ afterEvaluate {
 
                 pom {
                     name.set("OpenMRZ OCR")
-                    description.set("Offline MRZ-trained Tesseract OCR for Android.")
+                    description.set("Offline dual-model MRZ OCR for Android.")
                     url.set("https://github.com/Mehrdad32/OpenMRZ-Android")
                     licenses {
                         license {

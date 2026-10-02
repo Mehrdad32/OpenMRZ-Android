@@ -236,7 +236,7 @@ class MainActivity : ComponentActivity() {
         appendLine("Check digits: ${if (document.validation.checkDigitsValid) "VALID" else "PARTIAL / INVALID"}")
         appendLine("Field structure: ${if (document.validation.fields.isValid) "VALID" else "SUSPICIOUS"}")
         appendLine("OCR confidence: ${result.confidence}%")
-        appendLine("Processing: ${result.processingTimeMs} ms • Attempts: ${result.attemptCount}")
+        appendLine("Processing: ${result.processingTimeMs} ms • Attempts: ${result.attemptCount} • Engine: ${result.engine}")
         appendLine("Auto corrections: ${result.correctionCount}")
         appendLine("Trusted scan: ${result.isTrusted}")
         appendLine()

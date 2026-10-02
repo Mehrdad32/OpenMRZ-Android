@@ -10,10 +10,11 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 internal object MrzImagePreprocessor {
-    private const val TARGET_WIDTH = 1800
-
-    fun prepareContrast(source: Bitmap): Bitmap {
-        val scaled = scaleForOcr(source)
+    fun prepareContrast(
+        source: Bitmap,
+        targetWidth: Int,
+    ): Bitmap {
+        val scaled = scaleForOcr(source, targetWidth)
         val output = Bitmap.createBitmap(scaled.width, scaled.height, Bitmap.Config.ARGB_8888)
 
         val contrast = 1.85f
@@ -45,8 +46,11 @@ internal object MrzImagePreprocessor {
         return output
     }
 
-    fun prepareBinary(source: Bitmap): Bitmap {
-        val scaled = scaleForOcr(source)
+    fun prepareBinary(
+        source: Bitmap,
+        targetWidth: Int,
+    ): Bitmap {
+        val scaled = scaleForOcr(source, targetWidth)
         val width = scaled.width
         val height = scaled.height
         val gray = IntArray(width * height)
@@ -92,16 +96,20 @@ internal object MrzImagePreprocessor {
         return output
     }
 
-    private fun scaleForOcr(source: Bitmap): Bitmap {
-        if (source.width in 1500..2200) return source
+    private fun scaleForOcr(
+        source: Bitmap,
+        targetWidth: Int,
+    ): Bitmap {
+        val lower = (targetWidth * 0.88f).roundToInt()
+        val upper = (targetWidth * 1.12f).roundToInt()
+        if (source.width in lower..upper) return source
 
-        val width = TARGET_WIDTH
         val height = (
             source.height *
-                (width.toFloat() / source.width)
+                (targetWidth.toFloat() / source.width)
             ).roundToInt().coerceAtLeast(1)
 
-        return Bitmap.createScaledBitmap(source, width, height, true)
+        return Bitmap.createScaledBitmap(source, targetWidth, height, true)
     }
 
     private fun otsu(

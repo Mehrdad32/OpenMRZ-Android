@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.2.0-beta.2
+
+- Added a dual-model OCR pipeline: the small MRZ fast model is used first and the larger best model is fallback-only.
+- Reduced the fast preprocessing target from 1800px to 1280px while preserving the 1800px accurate path.
+- BALANCED mode now stops immediately when ICAO checksums and field structure are fully valid, even if OCR confidence remains below the trust threshold.
+- Fallback crops are probed with the fast model before spending time on the best model.
+- BEST-model fallback is limited to the most promising region in BALANCED mode.
+- Added `MrzOcrEngine` to report whether the selected result came from FAST or BEST.
+- Sample output now shows processing time, attempt count, and selected engine.
+
 ## v0.2.0-beta.1
 
 - Promoted OpenMRZ to the first public beta.
