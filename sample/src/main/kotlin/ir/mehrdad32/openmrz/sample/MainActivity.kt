@@ -288,6 +288,12 @@ class MainActivity : ComponentActivity() {
         appendLine("Expiry: ${document.expiryDate}")
         appendLine("Check digits: ${if (document.validation.checkDigitsValid) "VALID" else "PARTIAL / INVALID"}")
         appendLine("Field structure: ${if (document.validation.fields.isValid) "VALID" else "SUSPICIOUS"}")
+        if (!document.validation.fields.issuingState) {
+            appendLine("Warning: issuing-state code is not recognized.")
+        }
+        if (!document.validation.fields.nationality) {
+            appendLine("Warning: nationality code is not recognized.")
+        }
         appendLine("OCR confidence: ${result.confidence}%")
         appendLine("Processing: ${result.processingTimeMs} ms • Attempts: ${result.attemptCount} • Engine: ${result.engine}")
         appendLine("Auto corrections: ${result.correctionCount}")
