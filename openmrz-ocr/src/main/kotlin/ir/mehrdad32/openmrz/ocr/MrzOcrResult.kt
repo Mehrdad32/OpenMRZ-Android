@@ -9,6 +9,11 @@ enum class MrzScanStatus {
     NOT_RECOGNIZED,
 }
 
+enum class MrzOcrEngine {
+    FAST,
+    BEST,
+}
+
 data class MrzOcrResult(
     val rawText: String,
     val normalizedText: String,
@@ -19,6 +24,7 @@ data class MrzOcrResult(
     val regionDetected: Boolean = false,
     val attemptCount: Int = 1,
     val processingTimeMs: Long = 0,
+    val engine: MrzOcrEngine = MrzOcrEngine.BEST,
 ) {
     val isTrusted: Boolean
         get() = status == MrzScanStatus.VERIFIED

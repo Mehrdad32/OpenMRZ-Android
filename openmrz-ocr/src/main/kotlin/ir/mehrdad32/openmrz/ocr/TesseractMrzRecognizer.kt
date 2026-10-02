@@ -12,27 +12,30 @@ class TesseractMrzRecognizer(
     context: Context,
     private val config: MrzRecognizerConfig = MrzRecognizerConfig(),
 ) : Closeable {
+    private enum class RegionKind {
+        CROPPED,
+        DETECTED,
+        BOTTOM_52,
+        BOTTOM_64,
+    }
+
     private data class OcrAttempt(
         val rawText: String,
         val confidence: Int,
         val post: MrzPostProcessResult,
+        val engine: MrzOcrEngine,
+        val region: RegionKind,
     )
 
     private val appContext = context.applicationContext
-    private val tess = TessBaseAPI()
+    private val dataRoot = File(appContext.filesDir, "openmrz")
+    private val fastTess: TessBaseAPI
+    private var bestTess: TessBaseAPI? = null
     private var closed = false
 
     init {
-        val dataRoot = ensureLanguageData()
-        check(tess.init(dataRoot.absolutePath, LANGUAGE, TessBaseAPI.OEM_LSTM_ONLY)) {
-            "Failed to initialize Tesseract with bundled MRZ language data."
-        }
-        tess.setVariable(
-            TessBaseAPI.VAR_CHAR_WHITELIST,
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<",
-        )
-        tess.setVariable("preserve_interword_spaces", "1")
-        tess.setVariable("user_defined_dpi", "300")
+        ensureLanguageData(FAST_LANGUAGE, FAST_MIN_MODEL_BYTES)
+        fastTess = createTess(FAST_LANGUAGE)
     }
 
     @Synchronized
@@ -46,7 +49,9 @@ class TesseractMrzRecognizer(
     override fun close() {
         if (!closed) {
             closed = true
-            tess.recycle()
+            fastTess.recycle()
+            bestTess?.recycle()
+            bestTess = null
         }
     }
 
@@ -65,6 +70,8 @@ class TesseractMrzRecognizer(
                 rawText = "",
                 confidence = 0,
                 post = MrzOcrPostProcessor.parse(""),
+                engine = MrzOcrEngine.FAST,
+                region = if (autoDetectRegion) RegionKind.DETECTED else RegionKind.CROPPED,
             )
 
             return MrzOcrResult(
@@ -77,109 +84,161 @@ class TesseractMrzRecognizer(
                 regionDetected = regionDetected,
                 attemptCount = attempts.size,
                 processingTimeMs = (System.nanoTime() - startedNs) / 1_000_000L,
+                engine = best.engine,
             )
         }
 
-        fun processRegion(
-            region: Bitmap,
-            allowBinary: Boolean,
-            allowLineFallback: Boolean,
-        ): Boolean {
+        fun runFast(kind: RegionKind): Boolean {
+            val region = createRegion(bitmap, kind)
             try {
-                val contrast = MrzImagePreprocessor.prepareContrast(region)
+                if (kind == RegionKind.DETECTED) {
+                    regionDetected = region.second
+                }
+
+                val prepared = MrzImagePreprocessor.prepareContrast(
+                    region.first,
+                    config.fastTargetWidth,
+                )
+                try {
+                    val attempt = runAttempt(
+                        tess = fastTess,
+                        bitmap = prepared,
+                        pageSegMode = TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK,
+                        engine = MrzOcrEngine.FAST,
+                        region = kind,
+                    )
+                    attempts += attempt
+                    return shouldStopBalanced(attempt)
+                } finally {
+                    prepared.recycle()
+                }
+            } finally {
+                region.first.recycle()
+            }
+        }
+
+        fun runBest(
+            kind: RegionKind,
+            exhaustive: Boolean,
+        ): Boolean {
+            val region = createRegion(bitmap, kind)
+            try {
+                val tess = bestEngine()
+                val contrast = MrzImagePreprocessor.prepareContrast(
+                    region.first,
+                    config.accurateTargetWidth,
+                )
                 try {
                     val first = runAttempt(
-                        contrast,
-                        TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK,
+                        tess = tess,
+                        bitmap = contrast,
+                        pageSegMode = TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK,
+                        engine = MrzOcrEngine.BEST,
+                        region = kind,
                     )
                     attempts += first
 
-                    if (isVerified(first)) return true
-                    if (config.mode == MrzRecognitionMode.FAST) return false
+                    if (shouldStopBalanced(first)) return true
+                    if (!exhaustive) return false
 
-                    if (allowBinary) {
-                        val binary = MrzImagePreprocessor.prepareBinary(region)
-                        try {
-                            val second = runAttempt(
-                                binary,
-                                TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK,
-                            )
-                            attempts += second
-                            if (isVerified(second)) return true
-                        } finally {
-                            binary.recycle()
-                        }
+                    val binary = MrzImagePreprocessor.prepareBinary(
+                        region.first,
+                        config.accurateTargetWidth,
+                    )
+                    try {
+                        val second = runAttempt(
+                            tess = tess,
+                            bitmap = binary,
+                            pageSegMode = TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK,
+                            engine = MrzOcrEngine.BEST,
+                            region = kind,
+                        )
+                        attempts += second
+                        if (isVerified(second)) return true
+                    } finally {
+                        binary.recycle()
                     }
 
-                    if (allowLineFallback && !hasUsefulAttempt(attempts)) {
-                        collectLineAttempt(contrast, attempts)
-                        if (attempts.any(::isVerified)) return true
+                    if (!hasUsefulAttempt(attempts)) {
+                        collectLineAttempt(
+                            tess = tess,
+                            bitmap = contrast,
+                            output = attempts,
+                            engine = MrzOcrEngine.BEST,
+                            region = kind,
+                        )
                     }
                 } finally {
                     contrast.recycle()
                 }
             } finally {
-                region.recycle()
+                region.first.recycle()
             }
 
             return false
         }
 
         if (!autoDetectRegion) {
-            processRegion(
-                region = bitmap.copy(Bitmap.Config.ARGB_8888, false),
-                allowBinary = config.mode != MrzRecognitionMode.FAST,
-                allowLineFallback = config.mode == MrzRecognitionMode.ACCURATE,
+            if (runFast(RegionKind.CROPPED)) return finish()
+            if (config.mode == MrzRecognitionMode.FAST) return finish()
+
+            runBest(
+                kind = RegionKind.CROPPED,
+                exhaustive = config.mode == MrzRecognitionMode.ACCURATE,
             )
             return finish()
         }
 
-        val detected = MrzRegionDetector.detect(bitmap)
-        regionDetected = detected.detected
-
-        if (
-            processRegion(
-                region = detected.bitmap,
-                allowBinary = config.mode != MrzRecognitionMode.FAST,
-                allowLineFallback = false,
-            )
-        ) {
-            return finish()
-        }
-
+        if (runFast(RegionKind.DETECTED)) return finish()
         if (config.mode == MrzRecognitionMode.FAST) return finish()
 
-        if (
-            config.mode == MrzRecognitionMode.BALANCED &&
-            hasUsefulAttempt(attempts)
-        ) {
+        if (runFast(RegionKind.BOTTOM_52)) return finish()
+        if (runFast(RegionKind.BOTTOM_64)) return finish()
+
+        val preferredRegion = attempts
+            .filter { it.engine == MrzOcrEngine.FAST }
+            .maxByOrNull(::attemptScore)
+            ?.region
+            ?: RegionKind.DETECTED
+
+        if (config.mode == MrzRecognitionMode.BALANCED) {
+            runBest(preferredRegion, exhaustive = false)
             return finish()
         }
 
-        if (
-            processRegion(
-                region = bottomCrop(bitmap, 0.52f),
-                allowBinary = config.mode == MrzRecognitionMode.ACCURATE,
-                allowLineFallback = false,
-            )
-        ) {
-            return finish()
-        }
+        // Accurate mode keeps the expensive path, but only after all fast-model
+        // candidates failed to produce a fully valid MRZ.
+        val order = listOf(
+            preferredRegion,
+            RegionKind.DETECTED,
+            RegionKind.BOTTOM_52,
+            RegionKind.BOTTOM_64,
+        ).distinct()
 
-        if (
-            config.mode == MrzRecognitionMode.BALANCED &&
-            hasUsefulAttempt(attempts)
-        ) {
-            return finish()
+        for (kind in order) {
+            if (runBest(kind, exhaustive = true)) break
         }
-
-        processRegion(
-            region = bottomCrop(bitmap, 0.64f),
-            allowBinary = config.mode == MrzRecognitionMode.ACCURATE,
-            allowLineFallback = config.mode == MrzRecognitionMode.ACCURATE,
-        )
 
         return finish()
+    }
+
+    private fun createRegion(
+        source: Bitmap,
+        kind: RegionKind,
+    ): Pair<Bitmap, Boolean> = when (kind) {
+        RegionKind.CROPPED ->
+            source.copy(Bitmap.Config.ARGB_8888, false) to false
+
+        RegionKind.DETECTED -> {
+            val detected = MrzRegionDetector.detect(source)
+            detected.bitmap to detected.detected
+        }
+
+        RegionKind.BOTTOM_52 ->
+            bottomCrop(source, 0.52f) to false
+
+        RegionKind.BOTTOM_64 ->
+            bottomCrop(source, 0.64f) to false
     }
 
     private fun bottomCrop(
@@ -206,8 +265,11 @@ class TesseractMrzRecognizer(
     }
 
     private fun collectLineAttempt(
+        tess: TessBaseAPI,
         bitmap: Bitmap,
         output: MutableList<OcrAttempt>,
+        engine: MrzOcrEngine,
+        region: RegionKind,
     ) {
         val lines = MrzRegionDetector.splitLines(bitmap)
         if (lines.size !in 2..3) {
@@ -221,6 +283,7 @@ class TesseractMrzRecognizer(
 
             for (line in lines) {
                 val (text, confidence) = runRaw(
+                    tess,
                     line,
                     TessBaseAPI.PageSegMode.PSM_SINGLE_LINE,
                 )
@@ -233,6 +296,8 @@ class TesseractMrzRecognizer(
                 rawText = combined,
                 confidence = confidences.average().toInt(),
                 post = MrzOcrPostProcessor.parse(combined),
+                engine = engine,
+                region = region,
             )
         } finally {
             lines.forEach { if (!it.isRecycled) it.recycle() }
@@ -240,18 +305,24 @@ class TesseractMrzRecognizer(
     }
 
     private fun runAttempt(
+        tess: TessBaseAPI,
         bitmap: Bitmap,
         pageSegMode: Int,
+        engine: MrzOcrEngine,
+        region: RegionKind,
     ): OcrAttempt {
-        val (text, confidence) = runRaw(bitmap, pageSegMode)
+        val (text, confidence) = runRaw(tess, bitmap, pageSegMode)
         return OcrAttempt(
             rawText = text,
             confidence = confidence,
             post = MrzOcrPostProcessor.parse(text),
+            engine = engine,
+            region = region,
         )
     }
 
     private fun runRaw(
+        tess: TessBaseAPI,
         bitmap: Bitmap,
         pageSegMode: Int,
     ): Pair<String, Int> {
@@ -259,6 +330,15 @@ class TesseractMrzRecognizer(
         tess.setImage(bitmap)
         return tess.getUTF8Text().orEmpty() to
             tess.meanConfidence().coerceIn(0, 100)
+    }
+
+    private fun shouldStopBalanced(attempt: OcrAttempt): Boolean {
+        val parsed = attempt.post.parseResult as? MrzParseResult.Success
+            ?: return false
+
+        // Full ICAO checksum + structural validity is strong enough to stop
+        // BALANCED mode. Confidence still controls whether result.isTrusted is true.
+        return parsed.document.validation.isValid
     }
 
     private fun hasUsefulAttempt(attempts: List<OcrAttempt>): Boolean =
@@ -317,25 +397,48 @@ class TesseractMrzRecognizer(
         }
     }
 
-    private fun ensureLanguageData(): File {
-        val dataRoot = File(appContext.filesDir, "openmrz")
-        val tessdataDir = File(dataRoot, "tessdata")
-        val target = File(tessdataDir, LANGUAGE + ".traineddata")
+    private fun createTess(language: String): TessBaseAPI =
+        TessBaseAPI().also { api ->
+            check(api.init(dataRoot.absolutePath, language, TessBaseAPI.OEM_LSTM_ONLY)) {
+                "Failed to initialize Tesseract language: $language"
+            }
+            api.setVariable(
+                TessBaseAPI.VAR_CHAR_WHITELIST,
+                "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<",
+            )
+            api.setVariable("preserve_interword_spaces", "1")
+            api.setVariable("user_defined_dpi", "300")
+        }
 
-        if (!target.exists() || target.length() < MIN_MODEL_BYTES) {
+    private fun bestEngine(): TessBaseAPI {
+        val current = bestTess
+        if (current != null) return current
+
+        ensureLanguageData(BEST_LANGUAGE, BEST_MIN_MODEL_BYTES)
+        return createTess(BEST_LANGUAGE).also { bestTess = it }
+    }
+
+    private fun ensureLanguageData(
+        language: String,
+        minBytes: Long,
+    ) {
+        val tessdataDir = File(dataRoot, "tessdata")
+        val target = File(tessdataDir, "$language.traineddata")
+
+        if (!target.exists() || target.length() < minBytes) {
             tessdataDir.mkdirs()
-            appContext.assets.open("tessdata/" + LANGUAGE + ".traineddata").use { input ->
+            appContext.assets.open("tessdata/$language.traineddata").use { input ->
                 target.outputStream().use { output ->
                     input.copyTo(output)
                 }
             }
         }
-
-        return dataRoot
     }
 
     private companion object {
-        const val LANGUAGE = "mrz"
-        const val MIN_MODEL_BYTES = 10_000_000L
+        const val FAST_LANGUAGE = "mrz_fast"
+        const val BEST_LANGUAGE = "mrz_best"
+        const val FAST_MIN_MODEL_BYTES = 1_000_000L
+        const val BEST_MIN_MODEL_BYTES = 10_000_000L
     }
 }
