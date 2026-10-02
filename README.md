@@ -2,7 +2,7 @@
 
 Free, offline-first, open-source MRZ scanning SDK for Android.
 
-> Current prerelease: **v0.2.0-beta.1**
+> Current prerelease: **v0.2.0-beta.2**
 
 OpenMRZ is SDK-first. The sample APK only demonstrates the same public APIs shipped in the AARs.
 
@@ -36,11 +36,11 @@ MrzRecognizerConfig(
 )
 ```
 
-- `FAST`: one primary contrast/block OCR pass.
-- `BALANCED`: progressive fallback and early exit; recommended default.
-- `ACCURATE`: extra preprocessing/crops and line OCR when required.
+- `FAST`: small MRZ model, one primary pass.
+- `BALANCED`: small MRZ model first, then the larger best model only when needed; recommended default.
+- `ACCURATE`: exhaustive best-model preprocessing/crops and line OCR when required.
 
-A successful first pass stops immediately. Results expose:
+A checksum+structure-valid fast-model read stops immediately. Fallback crops are first probed with the small model; the larger model is used only when needed. Results expose:
 
 ```kotlin
 result.processingTimeMs
