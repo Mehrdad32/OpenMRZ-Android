@@ -32,11 +32,11 @@ import kotlin.math.roundToInt
 class MainActivity : ComponentActivity() {
     private lateinit var previewView: PreviewView
     private lateinit var statusView: TextView
-    private lateinit var pauseButton: Button
+    private lateinit var retryButton: Button
 
     private var scanner: OpenMrzScanner? = null
-    private var paused = false
     private var torchEnabled = false
+    private var resultLocked = false
     private var lastResultText: String? = null
 
     private val requestCameraPermission =
@@ -55,6 +55,9 @@ class MainActivity : ComponentActivity() {
                 return@registerForActivityResult
             }
 
+            scanner?.stop()
+            resultLocked = false
+            retryButton.isEnabled = false
             showStatus("Reading MRZ from selected image…")
             ensureScanner().recognize(
                 bitmap,
@@ -85,7 +88,12 @@ class MainActivity : ComponentActivity() {
             previewView = previewView,
             listener = object : OpenMrzScannerListener {
                 override fun onReady() {
-                    showStatus("Ready. Put only the MRZ lines inside the green frame.")
+                    if (!resultLocked) {
+                        showStatus("Ready. Put only the MRZ lines inside the green frame.")
+                        if (torchEnabled) {
+                            scanner?.setTorch(true)
+                        }
+                    }
                 }
 
                 override fun onResult(result: MrzOcrResult) {
@@ -155,22 +163,12 @@ class MainActivity : ComponentActivity() {
         }
         buttons.addView(galleryButton, LinearLayout.LayoutParams(0, dp(48), 1f))
 
-        pauseButton = Button(this).apply {
-            text = "Pause"
-            setOnClickListener {
-                paused = !paused
-                text = if (paused) "Resume" else "Pause"
-
-                if (paused) {
-                    scanner?.stop()
-                    showStatus("Scanner paused.")
-                } else {
-                    ensureScanner().start()
-                    showStatus("Scanner resumed.")
-                }
-            }
+        retryButton = Button(this).apply {
+            text = "Retry"
+            isEnabled = false
+            setOnClickListener { retryScan() }
         }
-        buttons.addView(pauseButton, LinearLayout.LayoutParams(0, dp(48), 1f))
+        buttons.addView(retryButton, LinearLayout.LayoutParams(0, dp(48), 1f))
 
         val torchButton = Button(this).apply {
             text = "Torch"
@@ -200,6 +198,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun publishResult(result: MrzOcrResult) {
+        if (resultLocked) return
+
         lastResultText = when (val parsed = result.parseResult) {
             is MrzParseResult.Success -> formatDocument(parsed.document, result)
             is MrzParseResult.Failure -> {
@@ -213,22 +213,38 @@ class MainActivity : ComponentActivity() {
 
         when (result.status) {
             MrzScanStatus.VERIFIED ->
-                showStatus("VERIFIED • OCR ${result.confidence}% • TAP FOR DETAILS")
+                lockResult("VERIFIED • OCR ${result.confidence}%")
 
             MrzScanStatus.CHECKSUM_VALID_LOW_CONFIDENCE ->
-                showStatus("CHECKSUM VALID • LOW CONFIDENCE ${result.confidence}% • TAP FOR DETAILS")
+                lockResult("CHECKSUM VALID • LOW CONFIDENCE ${result.confidence}%")
 
             MrzScanStatus.NEEDS_REVIEW ->
-                showStatus("NEEDS REVIEW • OCR ${result.confidence}% • TAP FOR DETAILS")
+                lockResult("NEEDS REVIEW • OCR ${result.confidence}%")
 
             MrzScanStatus.NOT_RECOGNIZED -> {
                 if (lastResultText == null) {
                     showStatus("Searching… OCR ${result.confidence}%")
                 } else {
-                    showStatus("Candidate found • OCR ${result.confidence}% • TAP FOR DETAILS")
+                    showStatus("Candidate found • OCR ${result.confidence}%")
                 }
             }
         }
+    }
+
+    private fun lockResult(status: String) {
+        resultLocked = true
+        scanner?.stop()
+        retryButton.isEnabled = true
+        showStatus("$status • PAUSED • TAP FOR DETAILS")
+        showResultDialog()
+    }
+
+    private fun retryScan() {
+        lastResultText = null
+        resultLocked = false
+        retryButton.isEnabled = false
+        showStatus("Retrying…")
+        ensureScanner().start()
     }
 
     private fun showResultDialog() {
