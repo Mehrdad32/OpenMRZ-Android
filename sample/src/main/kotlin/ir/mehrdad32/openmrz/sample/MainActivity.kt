@@ -218,8 +218,13 @@ class MainActivity : ComponentActivity() {
             MrzScanStatus.CHECKSUM_VALID_LOW_CONFIDENCE ->
                 lockResult("CHECKSUM VALID • LOW CONFIDENCE ${result.confidence}%")
 
-            MrzScanStatus.NEEDS_REVIEW ->
-                lockResult("NEEDS REVIEW • OCR ${result.confidence}%")
+            MrzScanStatus.NEEDS_REVIEW -> {
+                if (isReviewableCandidate(result)) {
+                    lockResult("NEEDS REVIEW • OCR ${result.confidence}%")
+                } else {
+                    showStatus("Candidate not stable yet • OCR ${result.confidence}%")
+                }
+            }
 
             MrzScanStatus.NOT_RECOGNIZED -> {
                 if (lastResultText == null) {
@@ -229,6 +234,22 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun isReviewableCandidate(result: MrzOcrResult): Boolean {
+        val parsed = result.parseResult as? MrzParseResult.Success
+            ?: return false
+        val document = parsed.document
+        val fields = document.validation.fields
+
+        return result.confidence >= 15 &&
+            document.documentNumber.isNotBlank() &&
+            fields.documentCode &&
+            fields.nationality &&
+            fields.birthDateFormat &&
+            fields.expiryDateFormat &&
+            fields.sex &&
+            fields.names
     }
 
     private fun lockResult(status: String) {
