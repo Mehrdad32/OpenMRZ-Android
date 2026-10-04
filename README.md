@@ -2,7 +2,7 @@
 
 Free, offline-first, open-source MRZ scanning SDK for Android.
 
-> Current prerelease: **v0.2.0-beta.6**
+> Current stable release: **v0.2.0**
 
 OpenMRZ is SDK-first. The sample APK only demonstrates the same public APIs shipped in the AARs.
 
@@ -65,7 +65,7 @@ Complete scanner:
 
 ```kotlin
 implementation(
-    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-android:v0.2.0-beta.6"
+    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-android:v0.2.0"
 )
 ```
 
@@ -73,7 +73,7 @@ OCR only:
 
 ```kotlin
 implementation(
-    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-ocr:v0.2.0-beta.6"
+    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-ocr:v0.2.0"
 )
 ```
 
@@ -81,7 +81,7 @@ Parser only:
 
 ```kotlin
 implementation(
-    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-core:v0.2.0-beta.6"
+    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-core:v0.2.0"
 )
 ```
 
@@ -99,7 +99,7 @@ Applications that already capture or crop documents do not need the CameraX arti
 
 ```kotlin
 implementation(
-    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-ocr:v0.2.0-beta.6"
+    "com.github.Mehrdad32.OpenMRZ-Android:openmrz-ocr:v0.2.0"
 )
 ```
 
@@ -154,7 +154,7 @@ Recognition runs locally. There is no API key, license server, analytics require
 
 ## Direct release assets
 
-Each prerelease ships:
+Each release ships:
 
 - `openmrz-android-<version>.aar`
 - `openmrz-ocr-<version>.aar`

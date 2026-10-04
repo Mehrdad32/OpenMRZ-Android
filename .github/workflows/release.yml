@@ -30,6 +30,11 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#release/}"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          if [[ "$VERSION" == *-* ]]; then
+            echo "PRERELEASE=true" >> "$GITHUB_ENV"
+          else
+            echo "PRERELEASE=false" >> "$GITHUB_ENV"
+          fi
 
       - name: Install Android SDK packages
         shell: bash
@@ -58,18 +63,18 @@ jobs:
           tag_name: ${{ env.VERSION }}
           name: OpenMRZ Android ${{ env.VERSION }}
           target_commitish: ${{ github.sha }}
-          prerelease: true
+          prerelease: ${{ env.PRERELEASE }}
           generate_release_notes: true
           body: |
-            OpenMRZ beta 6 fast hybrid OCR stabilization.
+            OpenMRZ v0.2.0 stable.
 
-            - Removed arbitrary line-by-line ensemble that could combine unrelated OCR lines
-            - BALANCED mode now uses FAST first and at most one targeted generic second-line fallback
-            - Checksum-valid FAST candidates stop immediately instead of entering expensive fallback chains
-            - BEST/exhaustive OCR is reserved for ACCURATE mode
-            - Tester pauses only on reviewable candidates, not weak NEEDS_REVIEW noise
-            - ICAO name structure now requires the expected << separator
-            - Beta 4 image-only API, auto-pause, Retry, and CameraX-optional architecture are retained
+            - Stable baseline promoted from the tested beta.6 implementation
+            - FAST-first BALANCED recognition with one targeted generic second-line fallback
+            - Camera-independent Bitmap recognition API plus optional CameraX scanner
+            - Auto-pause/Retry tester workflow
+            - ICAO TD1/TD2/TD3 parsing and validation
+            - Semantic issuer/nationality validation
+            - Offline OCR with no API key or runtime network requirement
 
             Assets include both SDK AARs, the sample APK, and SHA-256 checksums.
           files: |
